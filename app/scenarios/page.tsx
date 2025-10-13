@@ -4,10 +4,6 @@ import { chatOrchestrator, type ChatMessage } from "../../lib/api";
 
 /**
  * Scenario Lab — Chat simulator
- * - Keeps message history
- * - Sends history to /api/orchestrator_chat
- * - Shows assistant text + (optional) parsed JSON as pretty panel
- * - Adds quick suggestion chips
  */
 
 const SEED: ChatMessage[] = [
@@ -30,27 +26,26 @@ export default function ScenariosChat() {
   }, [messages, loading, lastParsed]);
 
   async function sendText(text: string) {
-    const next = [...messages, { role: "user", content: text }];
+    // ✅ make the new message explicitly a ChatMessage to keep TS happy
+    const userMsg: ChatMessage = { role: "user", content: text };
+    const next: ChatMessage[] = [...messages, userMsg];
     setMessages(next);
     setInput("");
     setLoading(true);
     setLastParsed(null);
 
     try {
-      // Nudge user messages so the Orchestrator knows this is a scenario conversation
-      const nudged = next.map((m) =>
+      // ✅ keep the mapped result typed as ChatMessage[]
+      const nudged: ChatMessage[] = next.map((m): ChatMessage =>
         m.role === "user"
-          ? ({
-              ...m,
-              content: `scenario_chat: ${m.content} (company_id=demo)`,
-            } as ChatMessage)
-          : m
+          ? { role: "user", content: `scenario_chat: ${m.content} (company_id=demo)` }
+          : { role: "assistant", content: m.content }
       );
 
       const res = await chatOrchestrator(nudged);
       setMessages((prev) => [...prev, res.message]);
       if (res.parsed) setLastParsed(res.parsed);
-    } catch (e: any) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -77,7 +72,7 @@ export default function ScenariosChat() {
     }
   }
 
-  const suggestions = [
+  const suggestions: string[] = [
     "Buy a $50k truck at 7.5% for 36 months",
     "Hire 2 field techs at $28/hr starting next month",
     "Raise prices by 3% next quarter",
@@ -138,7 +133,9 @@ export default function ScenariosChat() {
       {lastParsed && (
         <section className="rounded-2xl bg-white shadow-sm border p-4">
           <h3 className="font-medium mb-2">Parsed Results</h3>
-          <pre className="text-xs overflow-auto">{JSON.stringify(lastParsed, null, 2)}</pre>
+          <pre className="text-xs overflow-auto">
+            {JSON.stringify(lastParsed, null, 2)}
+          </pre>
         </section>
       )}
 
