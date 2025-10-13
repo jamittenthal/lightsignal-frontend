@@ -1,16 +1,19 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { computeKpis, getBenchmarks, getFinancials, type PLRow } from "../../lib/finance";
+import { useEffect, useState } from "react";
+import { computeKpis, getBenchmarks, getFinancials } from "../../lib/finance";
 import { callOrchestrator } from "../../lib/api";
 
+type BenchItem = { metric: string; peer_median: number; peer_top_quartile: number };
 type View = {
   kpis?: Record<string, number>;
   months?: string[];
   revenue?: number[];
   ebitda?: number[];
-  bench?: { metric: string; peer_median: number; peer_top_quartile: number }[];
+  bench?: BenchItem[];
   insights?: string[];
 };
+
+type Fmt = "currency" | "percent" | "number";
 
 export default function Overview() {
   const [view, setView] = useState<View>({});
@@ -20,20 +23,27 @@ export default function Overview() {
   useEffect(() => {
     (async () => {
       try {
-        // Pull normalized financials + KPIs + Benchmarks
-        const [fin, k, b] = await Promise.all([getFinancials("demo"), computeKpis("demo"), getBenchmarks("demo")]);
+        const [fin, k, b] = await Promise.all([
+          getFinancials("demo"),
+          computeKpis("demo"),
+          getBenchmarks("demo"),
+        ]);
+
         const months = fin.pl.map((r) => r.month);
         const revenue = fin.pl.map((r) => r.revenue);
         const gp = fin.pl.map((r) => r.revenue - r.cogs);
         const opex = fin.pl.map((r) => r.opex);
         const ebitda = gp.map((g, i) => g - opex[i]);
 
-        // Ask Orchestrator for short insights (uses your assistant but optional)
         let insights: string[] | undefined = undefined;
         try {
-          const res = await callOrchestrator("write_insights for overview company_id=demo (3 bullets)");
+          const res = await callOrchestrator(
+            "write_insights for overview company_id=demo (3 bullets)"
+          );
           insights = res?.insights ?? undefined;
-        } catch { /* optional, ignore errors */ }
+        } catch {
+          /* optional */
+        }
 
         setView({
           kpis: k.kpis,
@@ -52,7 +62,9 @@ export default function Overview() {
   }, []);
 
   const k = view.kpis || {};
-  const cards = [
+
+  // ✅ Explicitly type this array so fmt is the literal union, not a generic string
+  const cards: { label: string; value?: number; fmt?: Fmt }[] = [
     { label: "Revenue (TTM)", value: k.revenue_ttm, fmt: "currency" },
     { label: "EBITDA (TTM)", value: k.ebitda_ttm, fmt: "currency" },
     { label: "Gross Margin", value: (k.gross_margin ?? 0) * 100, fmt: "percent" },
@@ -87,21 +99,28 @@ export default function Overview() {
       {/* Simple inline chart (Revenue & EBITDA) */}
       <section className="rounded-2xl bg-white p-4 shadow-sm border">
         <h3 className="font-medium mb-4">Revenue & EBITDA (last 12 months)</h3>
-        <MiniChart months={view.months || []} series={[
-          { name: "Revenue", data: view.revenue || [] },
-          { name: "EBITDA", data: view.ebitda || [] },
-        ]}/>
+        <MiniChart
+          months={view.months || []}
+          series={[
+            { name: "Revenue", data: view.revenue || [] },
+            { name: "EBITDA", data: view.ebitda || [] },
+          ]}
+        />
       </section>
 
       {/* Benchmarks */}
       <section className="rounded-2xl bg-white p-4 shadow-sm border">
-        <h3 className="font-medium mb-3">Benchmarks (peer median / top quartile)</h3>
+        <h3 className="font-medium mb-3">
+          Benchmarks (peer median / top quartile)
+        </h3>
         <div className="grid md:grid-cols-3 gap-4 text-sm">
           {(view.bench || []).map((b, i) => (
             <div key={i} className="rounded-xl bg-slate-50 p-3 border">
               <div className="text-slate-500">{labelize(b.metric)}</div>
               <div className="mt-1">
-                <span className="font-medium">{displayMetric(b.metric, b.peer_median)}</span>
+                <span className="font-medium">
+                  {displayMetric(b.metric, b.peer_median)}
+                </span>
                 <span className="text-slate-500">  /  </span>
                 <span>{displayMetric(b.metric, b.peer_top_quartile)}</span>
               </div>
@@ -115,7 +134,9 @@ export default function Overview() {
         <section className="rounded-2xl bg-white p-4 shadow-sm border">
           <h3 className="font-medium mb-2">Insights</h3>
           <ul className="list-disc pl-6 text-sm space-y-1">
-            {view.insights.map((s, i) => <li key={i}>{s}</li>)}
+            {view.insights.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
           </ul>
         </section>
       )}
@@ -123,9 +144,14 @@ export default function Overview() {
   );
 }
 
-function fmt(v?: number, kind: "currency" | "percent" | "number" = "number") {
+function fmt(v?: number, kind: Fmt = "number") {
   if (typeof v !== "number") return "—";
-  if (kind === "currency") return Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
+  if (kind === "currency")
+    return Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(v);
   if (kind === "percent") return `${v.toFixed(1)}%`;
   return Number.isInteger(v) ? v.toString() : v.toFixed(2);
 }
@@ -143,42 +169,75 @@ function labelize(metric: string) {
 }
 
 function displayMetric(metric: string, v: number) {
-  if (metric.includes("margin") || metric.includes("growth")) return `${(v * 100).toFixed(1)}%`;
+  if (metric.includes("margin") || metric.includes("growth"))
+    return `${(v * 100).toFixed(1)}%`;
   if (metric.includes("ratio")) return v.toFixed(2);
   if (metric.includes("ccc")) return `${v.toFixed(0)}d`;
   return v.toString();
 }
 
 /** Minimal inline chart using SVG, no extra libs */
-function MiniChart({ months, series }: { months: string[]; series: { name: string; data: number[] }[] }) {
-  const w = 800, h = 220, pad = 32;
-  const maxY = Math.max(1, ...series.flatMap(s => s.data));
+function MiniChart({
+  months,
+  series,
+}: {
+  months: string[];
+  series: { name: string; data: number[] }[];
+}) {
+  const w = 800,
+    h = 220,
+    pad = 32;
+  const maxY = Math.max(1, ...series.flatMap((s) => s.data));
   const stepX = (w - pad * 2) / Math.max(1, months.length - 1);
 
   function linePath(data: number[]) {
-    return data.map((y, i) => {
-      const x = pad + i * stepX;
-      const yy = h - pad - (y / maxY) * (h - pad * 2);
-      return `${i === 0 ? "M" : "L"} ${x} ${yy}`;
-    }).join(" ");
+    return data
+      .map((y, i) => {
+        const x = pad + i * stepX;
+        const yy = h - pad - (y / maxY) * (h - pad * 2);
+        return `${i === 0 ? "M" : "L"} ${x} ${yy}`;
+      })
+      .join(" ");
   }
 
   return (
     <div className="overflow-x-auto">
       <svg width={w} height={h} className="min-w-full">
         {/* axes */}
-        <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#e2e8f0" />
+        <line
+          x1={pad}
+          y1={h - pad}
+          x2={w - pad}
+          y2={h - pad}
+          stroke="#e2e8f0"
+        />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#e2e8f0" />
         {/* series */}
         {series.map((s, idx) => (
           <g key={idx}>
-            <path d={linePath(s.data)} fill="none" stroke={idx === 0 ? "#0ea5e9" : "#10b981"} strokeWidth={2} />
+            <path
+              d={linePath(s.data)}
+              fill="none"
+              stroke={idx === 0 ? "#0ea5e9" : "#10b981"}
+              strokeWidth={2}
+            />
           </g>
         ))}
         {/* x labels */}
         {months.map((m, i) => {
           const x = pad + i * stepX;
-          return <text key={m} x={x} y={h - 8} fontSize="10" textAnchor="middle" fill="#64748b">{m.slice(5)}</text>;
+          return (
+            <text
+              key={m}
+              x={x}
+              y={h - 8}
+              fontSize="10"
+              textAnchor="middle"
+              fill="#64748b"
+            >
+              {m.slice(5)}
+            </text>
+          );
         })}
       </svg>
     </div>
