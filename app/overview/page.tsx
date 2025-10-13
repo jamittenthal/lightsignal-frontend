@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { callOrchestrator } from "@/lib/api";
+import { callOrchestrator } from "../../lib/api"; // relative import
 
 export default function Overview() {
   const [data, setData] = useState<any>(null);
