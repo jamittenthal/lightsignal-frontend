@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { callIntent } from "@/lib/api";
+import { callIntent, exportCSVUrl } from "@/lib/api";
 import Link from "next/link";
+import Chatbot from "./Chatbot";
+import DetailDrawer from "./DetailDrawer";
+import ProfilePanel from "./ProfilePanel";
 
 type KPIBlock = {
   active_count?: number;
   potential_value?: number;
-  avg_fit_score?: number;      // 0..1
-  event_readiness?: number;    // 0..1
-  historical_roi?: number;     // 0..1
+  avg_fit_score?: number;
+  event_readiness?: number;
+  historical_roi?: number;
 };
 
 type BenchItem = { metric: string; value: number; peer_percentile: number };
@@ -46,6 +49,7 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<OppResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openItem, setOpenItem] = useState<any | null>(null);
 
   async function fetchOpps(r: string) {
     setLoading(true);
@@ -53,7 +57,6 @@ export default function OpportunitiesPage() {
     setData(null);
     try {
       const resp = await callIntent("opportunities", { region: r }, "demo");
-      // resp shape: { intent, company_id, result }
       setData(resp?.result as OppResult);
     } catch (e: any) {
       setError(e?.message || "Failed to load opportunities");
@@ -73,7 +76,6 @@ export default function OpportunitiesPage() {
   }
   function pct(n?: number) {
     if (typeof n !== "number") return "—";
-    // if already 0..1, show %
     const v = n <= 1 ? n * 100 : n;
     return `${v.toFixed(0)}%`;
   }
@@ -102,14 +104,10 @@ export default function OpportunitiesPage() {
           >
             {loading ? "Loading…" : "Refresh"}
           </button>
+          <a href={exportCSVUrl("demo")} className="rounded-md px-4 py-2 text-sm border">Export CSV</a>
+          <Link href="/opportunities/watchlist" className="rounded-md px-4 py-2 text-sm border">Watchlist</Link>
         </div>
       </div>
-
-      {error && (
-        <div className="mb-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
 
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
@@ -119,6 +117,11 @@ export default function OpportunitiesPage() {
         <KpiCard title="Event readiness" value={pct(k.event_readiness)} />
         <KpiCard title="Historical ROI" value={pct(k.historical_roi)} />
       </div>
+
+      {/* Profile setup */}
+      <section className="mb-8">
+        <ProfilePanel />
+      </section>
 
       {/* Insights */}
       <section className="mb-8">
@@ -136,7 +139,7 @@ export default function OpportunitiesPage() {
 
       {/* Items */}
       <section className="mb-8">
-        <h2 className="text-lg font-medium mb-3">Upcoming items</h2>
+        <h2 className="text-lg font-medium mb-3">Curated opportunities</h2>
         {items.length === 0 ? (
           <div className="text-sm text-slate-500">No items found.</div>
         ) : (
@@ -155,7 +158,7 @@ export default function OpportunitiesPage() {
               </thead>
               <tbody className="divide-y">
                 {items.map((it, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
+                  <tr key={idx} className="hover:bg-slate-50 cursor-pointer" onClick={() => setOpenItem(it)}>
                     <Td>{it.title}</Td>
                     <Td><Badge>{it.category}</Badge></Td>
                     <Td>{it.date || "—"}</Td>
@@ -180,7 +183,7 @@ export default function OpportunitiesPage() {
         )}
       </section>
 
-      {/* Visuals (simple render) */}
+      {/* Visuals */}
       {visuals.length > 0 && (
         <section className="mb-10">
           <h2 className="text-lg font-medium mb-3">Visuals</h2>
@@ -189,7 +192,6 @@ export default function OpportunitiesPage() {
               <div key={i} className="border rounded-md p-4">
                 <div className="font-medium mb-2">{v.title}</div>
                 <div className="text-xs text-slate-500 mb-2">({v.type})</div>
-                {/* Simple tabular fallback so we don’t need a chart lib right now */}
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <tbody>
@@ -208,13 +210,16 @@ export default function OpportunitiesPage() {
         </section>
       )}
 
-      {/* Raw JSON (debug) */}
+      {/* Debug */}
       <details className="mt-6">
         <summary className="cursor-pointer text-sm text-slate-500">Debug JSON</summary>
         <pre className="mt-2 text-xs bg-slate-50 p-3 rounded-md overflow-x-auto">
           {JSON.stringify(data, null, 2)}
         </pre>
       </details>
+
+      <Chatbot />
+      {openItem && <DetailDrawer item={openItem} onClose={() => setOpenItem(null)} />}
     </div>
   );
 }
@@ -236,9 +241,5 @@ function Badge({ children }: { children: any }) {
   );
 }
 
-function Th({ children }: { children: any }) {
-  return <th className="text-left px-3 py-2 text-xs font-semibold">{children}</th>;
-}
-function Td({ children }: { children: any }) {
-  return <td className="px-3 py-2">{children}</td>;
-}
+function Th({ children }: { children: any }) { return <th className="text-left px-3 py-2 text-xs font-semibold">{children}</th>; }
+function Td({ children }: { children: any }) { return <td className="px-3 py-2">{children}</td>; }
