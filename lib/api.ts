@@ -32,7 +32,7 @@ function tryExtractJson(text: string | undefined): any | undefined {
     }
   }
 
-  // 2) Fallback: take the longest {...} block
+  // 2) Fallback: longest {...} block
   const s = t.indexOf("{");
   const e = t.lastIndexOf("}");
   if (s >= 0 && e > s) {
@@ -42,7 +42,7 @@ function tryExtractJson(text: string | undefined): any | undefined {
     } catch {}
   }
 
-  // 3) final fallback: plain parse
+  // 3) final fallback
   try {
     return JSON.parse(t);
   } catch {
@@ -50,9 +50,37 @@ function tryExtractJson(text: string | undefined): any | undefined {
   }
 }
 
-/**
- * Chat with the Orchestrator via the backend.
- */
+/** Generic one-shot to the Orchestrator (Overview tab may use this). */
+export async function callOrchestrator(prompt: string): Promise<{
+  text: string;
+  parsed?: any;
+}> {
+  const resp = await api.post("/api/orchestrator", { prompt });
+  const data = resp.data;
+
+  if (typeof data?.result === "string") {
+    return { text: data.result, parsed: tryExtractJson(data.result) };
+  }
+  const text = typeof data === "string" ? data : JSON.stringify(data);
+  return { text, parsed: tryExtractJson(text) };
+}
+
+/** One-shot research (Insights tab) — same endpoint, research-triggered prompt. */
+export async function callResearch(prompt: string): Promise<{
+  text: string;
+  parsed?: any;
+}> {
+  const resp = await api.post("/api/orchestrator", { prompt });
+  const data = resp.data;
+
+  if (typeof data?.result === "string") {
+    return { text: data.result, parsed: tryExtractJson(data.result) };
+  }
+  const text = typeof data === "string" ? data : JSON.stringify(data);
+  return { text, parsed: tryExtractJson(text) };
+}
+
+/** Chat with the Orchestrator (Scenarios tab). */
 export async function chatOrchestrator(messages: ChatMessage[]): Promise<{
   message: ChatMessage;
   parsed?: any;
@@ -65,7 +93,6 @@ export async function chatOrchestrator(messages: ChatMessage[]): Promise<{
     return { message: data.message, parsed };
   }
 
-  // One-shot format fallback
   if (typeof data?.result === "string") {
     const parsed = tryExtractJson(data.result);
     return { message: { role: "assistant", content: data.result }, parsed };
@@ -73,26 +100,4 @@ export async function chatOrchestrator(messages: ChatMessage[]): Promise<{
 
   const content = typeof data === "string" ? data : JSON.stringify(data);
   return { message: { role: "assistant", content } };
-}
-
-/**
- * One-shot research call (used by Insights tab).
- * We post a single prompt to /api/orchestrator which will auto-route to Research Scout
- * when the prompt looks like a market/location/industry request.
- */
-export async function callResearch(prompt: string): Promise<{
-  text: string;
-  parsed?: any;
-}> {
-  const resp = await api.post("/api/orchestrator", { prompt });
-  const data = resp.data;
-
-  // Backend normally returns { assistant_id, result }
-  if (typeof data?.result === "string") {
-    return { text: data.result, parsed: tryExtractJson(data.result) };
-  }
-
-  // Fallback: stringify whatever came back
-  const text = typeof data === "string" ? data : JSON.stringify(data);
-  return { text, parsed: tryExtractJson(text) };
 }
