@@ -1,103 +1,54 @@
 // lib/api.ts
-import axios from "axios";
+export const API_BASE =
+  (process.env.NEXT_PUBLIC_API_URL || "https://lightsignal-backend.onrender.com").replace(/\/$/, "");
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
-
-const BASE =
-  process.env.NEXT_PUBLIC_API_URL?.trim() ||
-  "https://lightsignal-backend.onrender.com";
-
-const api = axios.create({
-  baseURL: BASE,
-  timeout: 60_000,
-});
-
-function tryExtractJson(text: string | undefined): any | undefined {
-  if (!text) return undefined;
-
-  // 1) Strip ```json fences if present
-  let t = text;
-  if (t.includes("```")) {
-    t = t.replace(/```json/gi, "```");
-    const parts = t.split("```");
-    for (const p of parts) {
-      const start = p.indexOf("{");
-      const end = p.lastIndexOf("}");
-      if (start >= 0 && end > start) {
-        const blob = p.slice(start, end + 1);
-        try {
-          return JSON.parse(blob);
-        } catch {}
-      }
-    }
+async function postJSON<T = any>(path: string, body: any): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${path} -> ${res.status} ${res.statusText} :: ${text}`);
   }
-
-  // 2) Fallback: longest {...} block
-  const s = t.indexOf("{");
-  const e = t.lastIndexOf("}");
-  if (s >= 0 && e > s) {
-    const blob = t.slice(s, e + 1);
-    try {
-      return JSON.parse(blob);
-    } catch {}
-  }
-
-  // 3) final fallback
-  try {
-    return JSON.parse(t);
-  } catch {
-    return undefined;
-  }
+  return res.json();
 }
 
-/** Generic one-shot to the Orchestrator (Overview tab may use this). */
-export async function callOrchestrator(prompt: string): Promise<{
-  text: string;
-  parsed?: any;
-}> {
-  const resp = await api.post("/api/orchestrator", { prompt });
-  const data = resp.data;
-
-  if (typeof data?.result === "string") {
-    return { text: data.result, parsed: tryExtractJson(data.result) };
+async function getJSON<T = any>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${path} -> ${res.status} ${res.statusText} :: ${text}`);
   }
-  const text = typeof data === "string" ? data : JSON.stringify(data);
-  return { text, parsed: tryExtractJson(text) };
+  return res.json();
 }
 
-/** One-shot research (Insights tab) — same endpoint, research-triggered prompt. */
-export async function callResearch(prompt: string): Promise<{
-  text: string;
-  parsed?: any;
-}> {
-  const resp = await api.post("/api/orchestrator", { prompt });
-  const data = resp.data;
-
-  if (typeof data?.result === "string") {
-    return { text: data.result, parsed: tryExtractJson(data.result) };
-  }
-  const text = typeof data === "string" ? data : JSON.stringify(data);
-  return { text, parsed: tryExtractJson(text) };
+export async function callIntent(
+  intent: string,
+  input: Record<string, any> = {},
+  company_id = "demo"
+): Promise<{ intent: string; company_id: string; result: any; warning?: string }> {
+  return postJSON("/api/intent", { intent, company_id, input });
 }
 
-/** Chat with the Orchestrator (Scenarios tab). */
-export async function chatOrchestrator(messages: ChatMessage[]): Promise<{
-  message: ChatMessage;
-  parsed?: any;
-}> {
-  const resp = await api.post("/api/orchestrator_chat", { messages });
-  const data = resp.data;
+// Profile
+export const getOpportunityProfile = (company_id = "demo") =>
+  getJSON(`/api/opportunity_profile/${company_id}`);
+export const upsertOpportunityProfile = (payload: any) =>
+  postJSON("/api/opportunity_profile", payload);
 
-  if (data?.message && typeof data.message.content === "string") {
-    const parsed = data.parsed ?? tryExtractJson(data.message.content);
-    return { message: data.message, parsed };
-  }
+// Watchlist
+export const listWatchlist = (company_id = "demo") =>
+  getJSON(`/api/watchlist/${company_id}`);
+export const addToWatchlist = (payload: any) =>
+  postJSON("/api/watchlist/add", payload);
+export const updateWatchItem = (payload: any) =>
+  postJSON("/api/watchlist/update", payload);
 
-  if (typeof data?.result === "string") {
-    const parsed = tryExtractJson(data.result);
-    return { message: { role: "assistant", content: data.result }, parsed };
-  }
-
-  const content = typeof data === "string" ? data : JSON.stringify(data);
-  return { message: { role: "assistant", content } };
-}
+// Simulate & Export
+export const simulateOpportunity = (opportunity: any, company_id = "demo") =>
+  postJSON("/api/opportunities/simulate", { company_id, opportunity });
+export const exportCSVUrl = (company_id = "demo") =>
+  `${API_BASE}/api/opportunities/export.csv?company_id=${encodeURIComponent(company_id)}`;
