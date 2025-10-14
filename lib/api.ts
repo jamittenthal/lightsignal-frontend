@@ -51,38 +51,48 @@ function tryExtractJson(text: string | undefined): any | undefined {
 }
 
 /**
- * Send chat to orchestrator backend.
- * Returns:
- *  - message: assistant bubble text
- *  - parsed: normalized JSON object if available
+ * Chat with the Orchestrator via the backend.
  */
 export async function chatOrchestrator(messages: ChatMessage[]): Promise<{
   message: ChatMessage;
   parsed?: any;
 }> {
   const resp = await api.post("/api/orchestrator_chat", { messages });
-
-  // Backend already returns { message, parsed } when it can.
   const data = resp.data;
 
   if (data?.message && typeof data.message.content === "string") {
     const parsed = data.parsed ?? tryExtractJson(data.message.content);
-    return {
-      message: data.message,
-      parsed,
-    };
+    return { message: data.message, parsed };
   }
 
-  // One-shot format fallback ({assistant_id, result})
+  // One-shot format fallback
   if (typeof data?.result === "string") {
     const parsed = tryExtractJson(data.result);
-    return {
-      message: { role: "assistant", content: data.result },
-      parsed,
-    };
+    return { message: { role: "assistant", content: data.result }, parsed };
   }
 
-  // Unknown shape -> just stringify
   const content = typeof data === "string" ? data : JSON.stringify(data);
   return { message: { role: "assistant", content } };
+}
+
+/**
+ * One-shot research call (used by Insights tab).
+ * We post a single prompt to /api/orchestrator which will auto-route to Research Scout
+ * when the prompt looks like a market/location/industry request.
+ */
+export async function callResearch(prompt: string): Promise<{
+  text: string;
+  parsed?: any;
+}> {
+  const resp = await api.post("/api/orchestrator", { prompt });
+  const data = resp.data;
+
+  // Backend normally returns { assistant_id, result }
+  if (typeof data?.result === "string") {
+    return { text: data.result, parsed: tryExtractJson(data.result) };
+  }
+
+  // Fallback: stringify whatever came back
+  const text = typeof data === "string" ? data : JSON.stringify(data);
+  return { text, parsed: tryExtractJson(text) };
 }
