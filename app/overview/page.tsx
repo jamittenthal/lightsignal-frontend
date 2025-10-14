@@ -115,7 +115,7 @@ export default function Overview() {
           <h2 className="text-lg font-medium text-slate-700 mb-2">
             Key Insights
           </h2>
-        <ul className="list-disc list-inside text-slate-600 space-y-1">
+          <ul className="list-disc list-inside text-slate-600 space-y-1">
             {insights.map((line, i) => (
               <li key={i}>{line}</li>
             ))}
@@ -123,7 +123,8 @@ export default function Overview() {
         </div>
       )}
 
-      <ProvenanceBadge source="quickbooks" confidence="medium" />
+      {/* Use a numeric confidence value */}
+      <ProvenanceBadge source="quickbooks" confidence={0.6} />
     </div>
   );
 }
