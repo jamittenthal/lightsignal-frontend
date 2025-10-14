@@ -2,97 +2,85 @@
 import { useEffect, useRef, useState } from "react";
 import { chatOrchestrator, type ChatMessage } from "../../lib/api";
 
-/** ---------- Types ---------- */
-
-type KPIKey =
-  | "revenue_ttm"
-  | "gross_profit_ttm"
-  | "ebitda_ttm"
-  | "net_income_ttm"
-  | "gross_margin"
-  | "ebitda_margin"
-  | "current_ratio"
-  | "debt_to_equity"
-  | "ccc_days"
-  | "runway_months"
-  | "net_income"
-  | "cash_on_hand"
-  | string;
-
-type KPIMap = Record<KPIKey, number>;
+type KPIMap = Record<string, number>;
+type Visual =
+  | { type: "bar"; title?: string; labels?: unknown; values?: unknown }
+  | { type: "line"; title?: string; labels?: unknown; series?: unknown; values?: unknown };
 
 type Norm = {
   base: KPIMap;
   scenario: KPIMap;
   delta: KPIMap;
   insights?: string[];
-  benchmarks?: { metric: string; value?: number; peer_percentile?: number; peer_median?: number; peer_top_quartile?: number }[];
-  visuals?: Array<
-    | { type: "bar"; title?: string; labels?: unknown; values?: unknown }
-    | { type: "line"; title?: string; labels?: unknown; series?: unknown }
-  >;
-  assumptions?: any;
-  notes?: string[];
-  /** keep the original parsed for debugging */
+  benchmarks?: { metric: string; value?: number; peer_percentile?: number; peer_median?: number }[];
+  visuals?: Visual[];
   _raw?: any;
 };
 
-/** ---------- Constants ---------- */
-
-const LABELS: Record<string, string> = {
-  revenue_ttm: "Revenue (TTM)",
-  gross_profit_ttm: "Gross Profit (TTM)",
-  ebitda_ttm: "EBITDA (TTM)",
-  net_income_ttm: "Net Income (TTM)",
-  net_income: "Net Income",
-  cash_on_hand: "Cash on Hand",
-  gross_margin: "Gross Margin",
-  ebitda_margin: "EBITDA Margin",
-  current_ratio: "Current Ratio",
-  debt_to_equity: "Debt / Equity",
-  ccc_days: "Cash Conversion Cycle (d)",
-  runway_months: "Runway (mo)",
-};
-
-const FORMATS: Partial<Record<string, "currency" | "percent" | "number">> = {
-  revenue_ttm: "currency",
-  gross_profit_ttm: "currency",
-  ebitda_ttm: "currency",
-  net_income_ttm: "currency",
-  net_income: "currency",
-  cash_on_hand: "currency",
-  gross_margin: "percent",
-  ebitda_margin: "percent",
-  current_ratio: "number",
-  debt_to_equity: "number",
-  ccc_days: "number",
-  runway_months: "number",
-};
-
-const ORDER: string[] = [
+const ORDER = [
+  "revenue_annual",
   "revenue_ttm",
   "gross_profit_ttm",
   "ebitda_ttm",
   "net_income_ttm",
   "net_income",
   "cash_on_hand",
+  "monthly_burn",
+  "runway_months",
   "gross_margin",
   "ebitda_margin",
   "current_ratio",
   "debt_to_equity",
-  "ccc_days",
-  "runway_months",
+  "jobs_per_month",
+  "avg_ticket",
+  "headcount",
 ];
+
+const LABELS: Record<string, string> = {
+  revenue_annual: "Revenue (Annual)",
+  revenue_ttm: "Revenue (TTM)",
+  gross_profit_ttm: "Gross Profit (TTM)",
+  ebitda_ttm: "EBITDA (TTM)",
+  net_income_ttm: "Net Income (TTM)",
+  net_income: "Net Income",
+  cash_on_hand: "Cash on Hand",
+  monthly_burn: "Monthly Burn",
+  runway_months: "Runway (mo)",
+  gross_margin: "Gross Margin",
+  ebitda_margin: "EBITDA Margin",
+  current_ratio: "Current Ratio",
+  debt_to_equity: "Debt / Equity",
+  jobs_per_month: "Jobs / Month",
+  avg_ticket: "Avg Ticket",
+  headcount: "Headcount",
+};
+
+const FORMATS: Partial<Record<string, "currency" | "percent" | "number">> = {
+  revenue_annual: "currency",
+  revenue_ttm: "currency",
+  gross_profit_ttm: "currency",
+  ebitda_ttm: "currency",
+  net_income_ttm: "currency",
+  net_income: "currency",
+  cash_on_hand: "currency",
+  monthly_burn: "currency",
+  runway_months: "number",
+  gross_margin: "percent",
+  ebitda_margin: "percent",
+  current_ratio: "number",
+  debt_to_equity: "number",
+  jobs_per_month: "number",
+  avg_ticket: "currency",
+  headcount: "number",
+};
 
 const SEED: ChatMessage[] = [
   {
     role: "assistant",
     content:
-      "Hi! I’m the Scenario Lab. Describe any change (e.g., “Buy a $50k truck at 7.5% for 36 months”, “Hire 2 techs at $28/hr”, “Raise prices 3% next quarter”). I’ll simulate Base vs Scenario and show KPIs.",
+      "Hi! I’m the Scenario Lab. Describe any change (e.g., “Buy a $50k truck at 7.5% for 36 months”, “Hire 2 techs at $28/hr”, “Expand to Austin next spring”). I’ll simulate Base vs Scenario and show KPIs.",
   },
 ];
-
-/** ---------- Page ---------- */
 
 export default function ScenariosChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(SEED);
@@ -121,12 +109,8 @@ export default function ScenariosChat() {
           : m
       );
       const res = await chatOrchestrator(nudged);
-
       setMessages((prev) => [...prev, res.message]);
-
-      if (res.parsed) {
-        setNorm(safeNormalize(res.parsed));
-      }
+      if (res.parsed) setNorm(normalize(res.parsed));
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -146,10 +130,10 @@ export default function ScenariosChat() {
   }
 
   const suggestions = [
-    "Buy a $50k truck at 7.5% for 36 months",
-    "Hire 2 field techs at $28/hr starting next month",
+    "Expand to Austin next spring",
+    "Hire 2 techs at $28/hr starting in January",
     "Raise prices by 3% next quarter",
-    "Cut overtime by 10% and add 1 dispatcher",
+    "Buy a $50k van at 7.5% for 36 months",
   ];
 
   return (
@@ -213,6 +197,18 @@ export default function ScenariosChat() {
               {showRaw ? "Hide raw JSON" : "Show raw JSON"}
             </button>
           </div>
+
+          {/* Verdict banner if present */}
+          {"_raw" in (norm as any) && (norm as any)._raw?.verdict && (
+            <div
+              className={`rounded-xl border p-3 text-sm ${
+                (norm as any)._raw.verdict.affordable ? "bg-emerald-50 border-emerald-200" : "bg-rose-50 border-rose-200"
+              }`}
+            >
+              <div className="font-medium mb-1">Affordability verdict</div>
+              <div>{(norm as any)._raw.verdict.summary}</div>
+            </div>
+          )}
 
           <div className="grid md:grid-cols-3 gap-4">
             <KpiPanel title="Base" kpis={norm.base} />
@@ -284,8 +280,6 @@ export default function ScenariosChat() {
   );
 }
 
-/** ---------- UI bits ---------- */
-
 function Bubble({ role, content }: { role: "user" | "assistant"; content: string }) {
   const isUser = role === "user";
   return (
@@ -321,12 +315,8 @@ function KpiPanel({
   kpis: KPIMap;
   emphasizeDelta?: boolean;
 }) {
-  const keysInKpis = Object.keys(kpis);
-  const ordered = [
-    ...ORDER.filter((k) => keysInKpis.includes(k)),
-    ...keysInKpis.filter((k) => !ORDER.includes(k)),
-  ];
-
+  const keys = Object.keys(kpis);
+  const ordered = [...ORDER.filter((k) => keys.includes(k)), ...keys.filter((k) => !ORDER.includes(k))];
   return (
     <div className="rounded-xl border p-3">
       <div className="font-medium mb-2">{title}</div>
@@ -349,28 +339,22 @@ function KpiPanel({
 }
 
 function fmtValue(key: string, v: number) {
-  const fmt = FORMATS[key] || inferFormatFromKey(key);
-  if (fmt === "currency")
-    return Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(v);
+  const fmt = FORMATS[key] || inferFmt(key);
+  if (fmt === "currency") return Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
   if (fmt === "percent") {
     const pct = Math.abs(v) > 1 ? v : v * 100;
     return `${pct.toFixed(1)}%`;
   }
   return Number.isInteger(v) ? v.toString() : v.toFixed(2);
 }
-function inferFormatFromKey(k: string): "currency" | "percent" | "number" {
+function inferFmt(k: string): "currency" | "percent" | "number" {
   if (k.includes("margin") || k.includes("growth") || k.endsWith("_pct")) return "percent";
-  if (k.includes("revenue") || k.includes("profit") || k.includes("income") || k.includes("cash"))
-    return "currency";
+  if (k.includes("revenue") || k.includes("profit") || k.includes("income") || k.includes("cash") || k.includes("ticket")) return "currency";
   return "number";
 }
 function colorDelta(v: number | undefined, k: string) {
   if (typeof v !== "number") return "";
-  const badWhenUp = ["debt_to_equity", "ccc_days"];
+  const badWhenUp = ["debt_to_equity", "monthly_burn"];
   const good = !badWhenUp.includes(k) ? v > 0 : v < 0;
   if (v === 0) return "";
   return good ? "text-emerald-600" : "text-rose-600";
@@ -379,15 +363,12 @@ function titleize(k: string) {
   return k.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-/** ---------- Charts (with guards) ---------- */
+/* -------- Charts + sanitizers -------- */
 
-function sanitizeVisual(
-  v:
-    | { type: "bar"; title?: string; labels?: unknown; values?: unknown }
-    | { type: "line"; title?: string; labels?: unknown; series?: unknown }
-) {
+function sanitizeVisual(v: Visual) {
   try {
-    if (v?.type === "bar") {
+    if (!v || typeof v !== "object" || !("type" in v)) return null;
+    if (v.type === "bar") {
       const labels = Array.isArray(v.labels) ? (v.labels as any[]).map(String) : [];
       const values = Array.isArray(v.values)
         ? (v.values as any[]).map((n) => (typeof n === "number" ? n : Number(n))).filter((n) => Number.isFinite(n))
@@ -397,17 +378,22 @@ function sanitizeVisual(
       }
       return null;
     }
-    if (v?.type === "line") {
+    if (v.type === "line") {
       const labels = Array.isArray(v.labels) ? (v.labels as any[]).map(String) : [];
-      const seriesIn = Array.isArray((v as any).series) ? ((v as any).series as any[]) : [];
-      const series = seriesIn
-        .map((s, idx) => ({
+      // Accept either series[] or a single values[] (convert to one series)
+      let series: { name: string; data: number[] }[] = [];
+      if (Array.isArray((v as any).series)) {
+        series = ((v as any).series as any[]).map((s, idx) => ({
           name: String(s?.name ?? `Series ${idx + 1}`),
           data: Array.isArray(s?.data)
             ? (s.data as any[]).map((n) => (typeof n === "number" ? n : Number(n))).filter((n) => Number.isFinite(n))
             : [],
-        }))
-        .filter((s) => s.data.length === labels.length && labels.length > 0);
+        }));
+      } else if (Array.isArray((v as any).values)) {
+        const vals = ((v as any).values as any[]).map((n) => (typeof n === "number" ? n : Number(n))).filter((n) => Number.isFinite(n));
+        series = [{ name: "Series 1", data: vals }];
+      }
+      series = series.filter((s) => s.data.length === labels.length && labels.length > 0);
       if (labels.length && series.length) {
         return { type: "line" as const, title: v.title, labels, series };
       }
@@ -420,12 +406,9 @@ function sanitizeVisual(
 }
 
 function BarChart({ title, labels, values }: { title?: string; labels: string[]; values: number[] }) {
-  const w = 800,
-    h = 220,
-    pad = 32,
-    barGap = 12;
+  const w = 800, h = 220, pad = 32, gap = 12;
   const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)));
-  const barW = (w - pad * 2 - barGap * (values.length - 1)) / Math.max(values.length, 1);
+  const barW = (w - pad * 2 - gap * (values.length - 1)) / Math.max(values.length, 1);
   return (
     <div className="overflow-x-auto">
       <div className="mb-2 font-medium">{title || "Chart"}</div>
@@ -433,7 +416,7 @@ function BarChart({ title, labels, values }: { title?: string; labels: string[];
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#e2e8f0" />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#e2e8f0" />
         {values.map((v, i) => {
-          const x = pad + i * (barW + barGap);
+          const x = pad + i * (barW + gap);
           const height = (Math.abs(v) / maxAbs) * (h - pad * 2);
           const y = v >= 0 ? h - pad - height : h - pad;
           return (
@@ -450,18 +433,8 @@ function BarChart({ title, labels, values }: { title?: string; labels: string[];
   );
 }
 
-function LineChart({
-  title,
-  labels,
-  series,
-}: {
-  title?: string;
-  labels: string[];
-  series: { name: string; data: number[] }[];
-}) {
-  const w = 800,
-    h = 220,
-    pad = 32;
+function LineChart({ title, labels, series }: { title?: string; labels: string[]; series: { name: string; data: number[] }[] }) {
+  const w = 800, h = 220, pad = 32;
   const maxY = Math.max(1, ...series.flatMap((s) => s.data));
   const stepX = (w - pad * 2) / Math.max(1, labels.length - 1);
   function path(data: number[]) {
@@ -497,10 +470,10 @@ function LineChart({
   );
 }
 
-/** ---------- Normalization (robust) ---------- */
+/* -------- Normalizer -------- */
 
-function safeNormalize(raw: any): Norm {
-  // Case B
+function normalize(raw: any): Norm {
+  // Structured shape already
   if (raw?.base?.kpis && raw?.scenario?.kpis) {
     const base = asNumMap(raw.base.kpis);
     const scenario = asNumMap(raw.scenario.kpis);
@@ -509,16 +482,14 @@ function safeNormalize(raw: any): Norm {
       base,
       scenario,
       delta,
-      insights: raw.notes || raw.insights,
+      insights: Array.isArray(raw.insights) ? raw.insights : [],
       benchmarks: Array.isArray(raw.benchmarks) ? raw.benchmarks : [],
       visuals: Array.isArray(raw.visuals) ? raw.visuals : [],
-      assumptions: raw.assumptions,
-      notes: raw.notes,
       _raw: raw,
     };
   }
 
-  // Case A
+  // Old flattened kpi_base/kpi_scenario shape
   if (raw?.kpis && typeof raw.kpis === "object") {
     const base: KPIMap = {};
     const scenario: KPIMap = {};
@@ -542,7 +513,6 @@ function safeNormalize(raw: any): Norm {
 
   return { base: {}, scenario: {}, delta: {}, _raw: raw };
 }
-
 function asNumMap(obj: any): KPIMap {
   const out: KPIMap = {};
   if (obj && typeof obj === "object") {
