@@ -71,27 +71,34 @@ export const exportCSVUrl = (company_id = "demo") =>
 
 /** -------- Backwards-compat exports (used by existing pages) -------- */
 
-/** Older pages ask for callOrchestrator — map to callIntent */
-export const callOrchestrator = (
+/** Legacy pages expect { parsed, text } from callOrchestrator */
+export const callOrchestrator = async (
   intent: string,
   input: Record<string, any> = {},
   company_id = "demo"
-) => callIntent(intent, input, company_id);
+): Promise<{ parsed: any; text: string }> => {
+  const resp = await callIntent(intent, input, company_id);
+  const parsed = resp.result;
+  const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+  return { parsed, text };
+};
 
-/** Older pages ask for chatOrchestrator — standardize on scenario_chat */
-export const chatOrchestrator = (
+/** Legacy pages expect { parsed, text } from chatOrchestrator */
+export const chatOrchestrator = async (
   question: string,
   company_id = "demo",
   extras: Record<string, any> = {}
-) => callIntent("scenario_chat", { question, ...extras }, company_id);
+): Promise<{ parsed: any; text: string }> => {
+  const resp = await callIntent("scenario_chat", { question, ...extras }, company_id);
+  const parsed = resp.result;
+  const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+  return { parsed, text };
+};
 
 /**
  * Older /insights page expects:
  *   const res = await callResearch(q);
- *   setText(res.text);        // string
- *   setParsed(res.parsed??null); // object
- *
- * Provide a compat wrapper that returns that shape.
+ *   setText(res.text); setParsed(res.parsed ?? null);
  */
 export const callResearch = async (
   query: string,
@@ -104,7 +111,7 @@ export const callResearch = async (
   return { text, parsed };
 };
 
-/** If you want the raw new-shape version elsewhere, use this: */
+/** Raw new-shape if needed */
 export const callResearchRaw = (
   query: string,
   region?: string,
