@@ -25,7 +25,8 @@ async function getJSON<T = any>(path: string): Promise<T> {
   return res.json();
 }
 
-/** ---- PRIMARY INTENT HELPER ---- */
+/** -------- Core unified helpers -------- */
+
 export async function callIntent(
   intent: string,
   input: Record<string, any> = {},
@@ -34,21 +35,24 @@ export async function callIntent(
   return postJSON("/api/intent", { intent, company_id, input });
 }
 
-/** ---- DIRECT BACKEND HELPERS (existing endpoints) ---- */
-export const callOverview = (company_id = "demo", periods = 12) =>
+/** Financial Overview (direct API) */
+export const getOverview = (company_id = "demo", periods = 12) =>
   postJSON("/api/overview", { company_id, periods });
 
-export const callScenario = (company_id = "demo", inputs: Record<string, any> = {}) =>
+/** Scenario API (direct) */
+export const runScenario = (company_id = "demo", inputs: Record<string, any> = {}) =>
   postJSON("/api/scenario", { company_id, inputs });
 
-/** ---- OPPORTUNITY PROFILE ---- */
+/** -------- Opportunities feature helpers -------- */
+
+// Profile
 export const getOpportunityProfile = (company_id = "demo") =>
   getJSON(`/api/opportunity_profile/${company_id}`);
 
 export const upsertOpportunityProfile = (payload: any) =>
   postJSON("/api/opportunity_profile", payload);
 
-/** ---- WATCHLIST ---- */
+// Watchlist
 export const listWatchlist = (company_id = "demo") =>
   getJSON(`/api/watchlist/${company_id}`);
 
@@ -58,30 +62,58 @@ export const addToWatchlist = (payload: any) =>
 export const updateWatchItem = (payload: any) =>
   postJSON("/api/watchlist/update", payload);
 
-/** ---- SIMULATE & EXPORT ---- */
+// Simulate & Export
 export const simulateOpportunity = (opportunity: any, company_id = "demo") =>
   postJSON("/api/opportunities/simulate", { company_id, opportunity });
 
 export const exportCSVUrl = (company_id = "demo") =>
   `${API_BASE}/api/opportunities/export.csv?company_id=${encodeURIComponent(company_id)}`;
 
-/* ======================================================================
-   LEGACY SHIMS (to keep /insights, /overview, /scenarios pages compiling)
-   Keep these until those pages are migrated to the new helpers.
-   ====================================================================== */
+/** -------- Backwards-compat exports (used by existing pages) -------- */
 
-/** Old: callResearch(query, region?) -> now routes to intent "research_digest" */
-export async function callResearch(query: string, region?: string, company_id = "demo") {
-  return callIntent("research_digest", { query, region }, company_id);
-}
+/** Older pages ask for callOrchestrator — map to callIntent */
+export const callOrchestrator = (
+  intent: string,
+  input: Record<string, any> = {},
+  company_id = "demo"
+) => callIntent(intent, input, company_id);
 
-/** Old: callOrchestrator(intent, input?) -> just forwards to callIntent */
-export async function callOrchestrator(intent: string, input: Record<string, any> = {}, company_id = "demo") {
-  return callIntent(intent, input, company_id);
-}
+/** Older pages ask for chatOrchestrator — standardize on scenario_chat */
+export const chatOrchestrator = (
+  question: string,
+  company_id = "demo",
+  extras: Record<string, any> = {}
+) => callIntent("scenario_chat", { question, ...extras }, company_id);
 
-/** Old: chatOrchestrator(message) -> send to /api/scenario as free-form scenario */
-export async function chatOrchestrator(message: string, company_id = "demo") {
-  // We treat it as a scenario chat; your backend /api/scenario already exists.
-  return callScenario(company_id, { message });
-}
+/**
+ * Older /insights page expects:
+ *   const res = await callResearch(q);
+ *   setText(res.text);        // string
+ *   setParsed(res.parsed??null); // object
+ *
+ * Provide a compat wrapper that returns that shape.
+ */
+export const callResearch = async (
+  query: string,
+  region?: string,
+  company_id = "demo"
+): Promise<{ text: string; parsed: any }> => {
+  const resp = await callIntent("research_digest", { query, region }, company_id);
+  const parsed = resp.result;
+  const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+  return { text, parsed };
+};
+
+/** If you want the raw new-shape version elsewhere, use this: */
+export const callResearchRaw = (
+  query: string,
+  region?: string,
+  company_id = "demo"
+) => callIntent("research_digest", { query, region }, company_id);
+
+/** Convenience wrappers */
+export const renderFinancialOverview = (company_id = "demo", periods = 12) =>
+  callIntent("render_financial_overview", { periods }, company_id);
+
+export const opportunities = (company_id = "demo", params: Record<string, any> = {}) =>
+  callIntent("opportunities", params, company_id);
