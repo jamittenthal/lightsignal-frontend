@@ -2,6 +2,12 @@
 export const API_BASE =
   (process.env.NEXT_PUBLIC_API_URL || "https://lightsignal-backend.onrender.com").replace(/\/$/, "");
 
+// ---------- Types ----------
+export type ChatMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
 async function postJSON<T = any>(path: string, body: any): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -69,7 +75,7 @@ export const simulateOpportunity = (opportunity: any, company_id = "demo") =>
 export const exportCSVUrl = (company_id = "demo") =>
   `${API_BASE}/api/opportunities/export.csv?company_id=${encodeURIComponent(company_id)}`;
 
-/** -------- Backwards-compat exports (used by existing pages) -------- */
+/** -------- Backwards-compat exports (legacy pages) -------- */
 
 /** Legacy pages expect { parsed, text } from callOrchestrator */
 export const callOrchestrator = async (
@@ -83,13 +89,26 @@ export const callOrchestrator = async (
   return { parsed, text };
 };
 
-/** Legacy pages expect { parsed, text } from chatOrchestrator */
+/** Legacy pages expect { parsed, text } from chatOrchestrator (single question) */
 export const chatOrchestrator = async (
   question: string,
   company_id = "demo",
   extras: Record<string, any> = {}
 ): Promise<{ parsed: any; text: string }> => {
   const resp = await callIntent("scenario_chat", { question, ...extras }, company_id);
+  const parsed = resp.result;
+  const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+  return { parsed, text };
+};
+
+/** Optional: messages-based helper if a page sends a transcript */
+export const chatOrchestratorMessages = async (
+  messages: ChatMessage[],
+  company_id = "demo",
+  extras: Record<string, any> = {}
+): Promise<{ parsed: any; text: string }> => {
+  const lastUser = [...messages].reverse().find(m => m.role === "user")?.content || "";
+  const resp = await callIntent("scenario_chat", { question: lastUser, messages, ...extras }, company_id);
   const parsed = resp.result;
   const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
   return { parsed, text };
