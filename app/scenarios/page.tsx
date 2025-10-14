@@ -2,15 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { chatOrchestrator, type ChatMessage } from "../../lib/api";
 
-/**
- * Scenario Lab — chat-first simulator with rich rendering
- * - Accepts any free-form user message
- * - Calls /api/orchestrator_chat
- * - Detects either result shape:
- *   A) { kpis: { <name>_base, <name>_scenario }, benchmarks:[], insights:[], visuals:[] }
- *   B) { base:{kpis:{}}, scenario:{kpis:{}}, delta:{kpis:{}}, assumptions, notes }
- * - Renders Base / Scenario / Delta KPI cards, Benchmarks, Insights, and Charts (SVG)
- */
+/** ---------- Types ---------- */
 
 type KPIKey =
   | "revenue_ttm"
@@ -23,36 +15,29 @@ type KPIKey =
   | "debt_to_equity"
   | "ccc_days"
   | "runway_months"
-  // also support ad-hoc names like "net_income", "cash_on_hand", etc:
   | "net_income"
   | "cash_on_hand"
   | string;
 
 type KPIMap = Record<KPIKey, number>;
 
-type Normalized = {
+type Norm = {
   base: KPIMap;
   scenario: KPIMap;
-  delta: KPIMap; // scenario - base
+  delta: KPIMap;
   insights?: string[];
   benchmarks?: { metric: string; value?: number; peer_percentile?: number; peer_median?: number; peer_top_quartile?: number }[];
   visuals?: Array<
-    | {
-        type: "bar";
-        title?: string;
-        labels: string[];
-        values: number[];
-      }
-    | {
-        type: "line";
-        title?: string;
-        labels: string[];
-        series: { name: string; data: number[] }[];
-      }
+    | { type: "bar"; title?: string; labels?: unknown; values?: unknown }
+    | { type: "line"; title?: string; labels?: unknown; series?: unknown }
   >;
   assumptions?: any;
   notes?: string[];
+  /** keep the original parsed for debugging */
+  _raw?: any;
 };
+
+/** ---------- Constants ---------- */
 
 const LABELS: Record<string, string> = {
   revenue_ttm: "Revenue (TTM)",
@@ -107,11 +92,14 @@ const SEED: ChatMessage[] = [
   },
 ];
 
+/** ---------- Page ---------- */
+
 export default function ScenariosChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(SEED);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [norm, setNorm] = useState<Normalized | null>(null);
+  const [norm, setNorm] = useState<Norm | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -127,7 +115,6 @@ export default function ScenariosChat() {
     setNorm(null);
 
     try {
-      // Nudge only the last user message to mark it as a scenario; backend can do this too.
       const nudged: ChatMessage[] = history.map((m, idx) =>
         idx === history.length - 1 && m.role === "user"
           ? { role: "user", content: `scenario_chat: ${m.content} (company_id=demo)` }
@@ -135,12 +122,10 @@ export default function ScenariosChat() {
       );
       const res = await chatOrchestrator(nudged);
 
-      // Always show the assistant's text reply as a bubble
       setMessages((prev) => [...prev, res.message]);
 
-      // If model returned JSON, normalize and render it
       if (res.parsed) {
-        setNorm(normalizeResult(res.parsed));
+        setNorm(safeNormalize(res.parsed));
       }
     } catch {
       setMessages((prev) => [
@@ -155,8 +140,8 @@ export default function ScenariosChat() {
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      const text = input.trim();
-      if (text && !loading) send(text);
+      const t = input.trim();
+      if (t && !loading) send(t);
     }
   }
 
@@ -175,7 +160,6 @@ export default function ScenariosChat() {
       </div>
 
       <div className="rounded-2xl bg-white shadow-sm border p-4">
-        {/* Suggestions (optional) */}
         <div className="flex flex-wrap gap-2 mb-3">
           {suggestions.map((s) => (
             <button
@@ -189,7 +173,6 @@ export default function ScenariosChat() {
           ))}
         </div>
 
-        {/* Chat history */}
         <div className="h-[46vh] overflow-y-auto space-y-3 pr-1 border rounded-xl p-3 mb-3">
           {messages.map((m, i) => (
             <Bubble key={i} role={m.role} content={m.content} />
@@ -198,7 +181,6 @@ export default function ScenariosChat() {
           <div ref={endRef} />
         </div>
 
-        {/* Input */}
         <div className="flex gap-2">
           <input
             value={input}
@@ -220,10 +202,17 @@ export default function ScenariosChat() {
         </div>
       </div>
 
-      {/* Normalized result rendering */}
       {norm && (
         <section className="rounded-2xl bg-white shadow-sm border p-4 space-y-4">
-          <h3 className="font-medium">Results</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium">Results</h3>
+            <button
+              className="text-xs underline underline-offset-2 text-slate-500"
+              onClick={() => setShowRaw((v) => !v)}
+            >
+              {showRaw ? "Hide raw JSON" : "Show raw JSON"}
+            </button>
+          </div>
 
           <div className="grid md:grid-cols-3 gap-4">
             <KpiPanel title="Base" kpis={norm.base} />
@@ -250,13 +239,26 @@ export default function ScenariosChat() {
 
           {norm.visuals && norm.visuals.length > 0 && (
             <div className="space-y-4">
-              {norm.visuals.map((v, i) =>
-                v.type === "bar" ? (
-                  <BarChart key={i} title={v.title} labels={v.labels} values={v.values} />
-                ) : (
-                  <LineChart key={i} title={v.title} labels={v.labels} series={(v as any).series} />
-                )
-              )}
+              {norm.visuals
+                .map((vv) => sanitizeVisual(vv))
+                .filter(Boolean)
+                .map((v, i) =>
+                  v!.type === "bar" ? (
+                    <BarChart
+                      key={i}
+                      title={v!.title}
+                      labels={(v as any).labels}
+                      values={(v as any).values}
+                    />
+                  ) : (
+                    <LineChart
+                      key={i}
+                      title={v!.title}
+                      labels={(v as any).labels}
+                      series={(v as any).series}
+                    />
+                  )
+                )}
             </div>
           )}
 
@@ -270,13 +272,19 @@ export default function ScenariosChat() {
               </ul>
             </div>
           )}
+
+          {showRaw && (
+            <div className="rounded-xl bg-slate-50 border p-3 text-xs overflow-auto">
+              <pre>{JSON.stringify(norm._raw, null, 2)}</pre>
+            </div>
+          )}
         </section>
       )}
     </main>
   );
 }
 
-/* ---------- UI bits ---------- */
+/** ---------- UI bits ---------- */
 
 function Bubble({ role, content }: { role: "user" | "assistant"; content: string }) {
   const isUser = role === "user";
@@ -313,33 +321,42 @@ function KpiPanel({
   kpis: KPIMap;
   emphasizeDelta?: boolean;
 }) {
-  // choose a stable order first, then include any extra keys
   const keysInKpis = Object.keys(kpis);
-  const ordered = [...ORDER.filter((k) => keysInKpis.includes(k)), ...keysInKpis.filter((k) => !ORDER.includes(k))];
+  const ordered = [
+    ...ORDER.filter((k) => keysInKpis.includes(k)),
+    ...keysInKpis.filter((k) => !ORDER.includes(k)),
+  ];
 
   return (
     <div className="rounded-xl border p-3">
       <div className="font-medium mb-2">{title}</div>
       <div className="grid grid-cols-2 gap-2 text-sm">
-        {ordered.map((k) => (
-          <div key={k} className="rounded-lg bg-white border p-2">
-            <div className="text-xs text-slate-500">{LABELS[k] || titleize(k)}</div>
-            <div className={`text-sm font-semibold ${emphasizeDelta ? colorDelta(kpis[k], k) : ""}`}>
-              {fmtValue(k, kpis[k])}
+        {ordered.map((k) => {
+          const v = kpis[k];
+          const safe = typeof v === "number" && Number.isFinite(v);
+          return (
+            <div key={k} className="rounded-lg bg-white border p-2">
+              <div className="text-xs text-slate-500">{LABELS[k] || titleize(k)}</div>
+              <div className={`text-sm font-semibold ${emphasizeDelta ? colorDelta(v, k) : ""}`}>
+                {safe ? fmtValue(k, v) : "—"}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function fmtValue(key: string, v: number) {
-  if (typeof v !== "number" || Number.isNaN(v)) return "—";
   const fmt = FORMATS[key] || inferFormatFromKey(key);
-  if (fmt === "currency") return Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
+  if (fmt === "currency")
+    return Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(v);
   if (fmt === "percent") {
-    // accept either 0..1 or -100..100 style; normalize if needed
     const pct = Math.abs(v) > 1 ? v : v * 100;
     return `${pct.toFixed(1)}%`;
   }
@@ -347,12 +364,12 @@ function fmtValue(key: string, v: number) {
 }
 function inferFormatFromKey(k: string): "currency" | "percent" | "number" {
   if (k.includes("margin") || k.includes("growth") || k.endsWith("_pct")) return "percent";
-  if (k.includes("revenue") || k.includes("profit") || k.includes("income") || k.includes("cash")) return "currency";
+  if (k.includes("revenue") || k.includes("profit") || k.includes("income") || k.includes("cash"))
+    return "currency";
   return "number";
 }
 function colorDelta(v: number | undefined, k: string) {
   if (typeof v !== "number") return "";
-  // good if positive for margins/income/cash; bad if positive for debt_to_equity, ccc_days
   const badWhenUp = ["debt_to_equity", "ccc_days"];
   const good = !badWhenUp.includes(k) ? v > 0 : v < 0;
   if (v === 0) return "";
@@ -362,10 +379,51 @@ function titleize(k: string) {
   return k.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-/* ---------- Charts (SVG, no libs) ---------- */
+/** ---------- Charts (with guards) ---------- */
+
+function sanitizeVisual(
+  v:
+    | { type: "bar"; title?: string; labels?: unknown; values?: unknown }
+    | { type: "line"; title?: string; labels?: unknown; series?: unknown }
+) {
+  try {
+    if (v?.type === "bar") {
+      const labels = Array.isArray(v.labels) ? (v.labels as any[]).map(String) : [];
+      const values = Array.isArray(v.values)
+        ? (v.values as any[]).map((n) => (typeof n === "number" ? n : Number(n))).filter((n) => Number.isFinite(n))
+        : [];
+      if (labels.length && values.length && labels.length === values.length) {
+        return { type: "bar" as const, title: v.title, labels, values };
+      }
+      return null;
+    }
+    if (v?.type === "line") {
+      const labels = Array.isArray(v.labels) ? (v.labels as any[]).map(String) : [];
+      const seriesIn = Array.isArray((v as any).series) ? ((v as any).series as any[]) : [];
+      const series = seriesIn
+        .map((s, idx) => ({
+          name: String(s?.name ?? `Series ${idx + 1}`),
+          data: Array.isArray(s?.data)
+            ? (s.data as any[]).map((n) => (typeof n === "number" ? n : Number(n))).filter((n) => Number.isFinite(n))
+            : [],
+        }))
+        .filter((s) => s.data.length === labels.length && labels.length > 0);
+      if (labels.length && series.length) {
+        return { type: "line" as const, title: v.title, labels, series };
+      }
+      return null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function BarChart({ title, labels, values }: { title?: string; labels: string[]; values: number[] }) {
-  const w = 800, h = 220, pad = 32, barGap = 12;
+  const w = 800,
+    h = 220,
+    pad = 32,
+    barGap = 12;
   const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)));
   const barW = (w - pad * 2 - barGap * (values.length - 1)) / Math.max(values.length, 1);
   return (
@@ -377,7 +435,7 @@ function BarChart({ title, labels, values }: { title?: string; labels: string[];
         {values.map((v, i) => {
           const x = pad + i * (barW + barGap);
           const height = (Math.abs(v) / maxAbs) * (h - pad * 2);
-          const y = v >= 0 ? h - pad - height : h - pad; // (for negatives)
+          const y = v >= 0 ? h - pad - height : h - pad;
           return (
             <g key={i}>
               <rect x={x} y={y} width={barW} height={height} fill={v >= 0 ? "#0ea5e9" : "#f43f5e"} />
@@ -401,7 +459,9 @@ function LineChart({
   labels: string[];
   series: { name: string; data: number[] }[];
 }) {
-  const w = 800, h = 220, pad = 32;
+  const w = 800,
+    h = 220,
+    pad = 32;
   const maxY = Math.max(1, ...series.flatMap((s) => s.data));
   const stepX = (w - pad * 2) / Math.max(1, labels.length - 1);
   function path(data: number[]) {
@@ -437,61 +497,74 @@ function LineChart({
   );
 }
 
-/* ---------- Normalizer ---------- */
+/** ---------- Normalization (robust) ---------- */
 
-function normalizeResult(raw: any): Normalized {
-  // Case B: { base:{kpis}, scenario:{kpis}, delta:{kpis}, ... }
+function safeNormalize(raw: any): Norm {
+  // Case B
   if (raw?.base?.kpis && raw?.scenario?.kpis) {
-    const base = raw.base.kpis as KPIMap;
-    const scenario = raw.scenario.kpis as KPIMap;
-    const delta = raw.delta?.kpis ?? subtractMaps(scenario, base);
+    const base = asNumMap(raw.base.kpis);
+    const scenario = asNumMap(raw.scenario.kpis);
+    const delta = raw.delta?.kpis ? asNumMap(raw.delta.kpis) : subtractMaps(scenario, base);
     return {
       base,
       scenario,
       delta,
       insights: raw.notes || raw.insights,
-      benchmarks: raw.benchmarks,
-      visuals: raw.visuals,
+      benchmarks: Array.isArray(raw.benchmarks) ? raw.benchmarks : [],
+      visuals: Array.isArray(raw.visuals) ? raw.visuals : [],
       assumptions: raw.assumptions,
       notes: raw.notes,
+      _raw: raw,
     };
   }
 
-  // Case A: { kpis: { <name>_base, <name>_scenario, ... }, benchmarks, insights, visuals }
+  // Case A
   if (raw?.kpis && typeof raw.kpis === "object") {
     const base: KPIMap = {};
     const scenario: KPIMap = {};
-    Object.entries(raw.kpis as Record<string, number>).forEach(([key, val]) => {
-      if (key.endsWith("_base")) {
-        base[key.replace(/_base$/, "")] = val as number;
-      } else if (key.endsWith("_scenario")) {
-        scenario[key.replace(/_scenario$/, "")] = val as number;
-      } else {
-        // ignore or keep as-is if already neutral
-      }
-    });
+    for (const [k, v] of Object.entries(raw.kpis)) {
+      const n = toNum(v);
+      if (!Number.isFinite(n)) continue;
+      if (k.endsWith("_base")) base[k.replace(/_base$/, "")] = n;
+      else if (k.endsWith("_scenario")) scenario[k.replace(/_scenario$/, "")] = n;
+    }
     const delta = subtractMaps(scenario, base);
     return {
       base,
       scenario,
       delta,
-      insights: raw.insights,
-      benchmarks: raw.benchmarks,
-      visuals: raw.visuals,
+      insights: Array.isArray(raw.insights) ? raw.insights : [],
+      benchmarks: Array.isArray(raw.benchmarks) ? raw.benchmarks : [],
+      visuals: Array.isArray(raw.visuals) ? raw.visuals : [],
+      _raw: raw,
     };
   }
 
-  // Fallback: nothing structured
-  return { base: {}, scenario: {}, delta: {} };
+  return { base: {}, scenario: {}, delta: {}, _raw: raw };
 }
 
+function asNumMap(obj: any): KPIMap {
+  const out: KPIMap = {};
+  if (obj && typeof obj === "object") {
+    for (const [k, v] of Object.entries(obj)) {
+      const n = toNum(v);
+      if (Number.isFinite(n)) out[k] = n;
+    }
+  }
+  return out;
+}
 function subtractMaps(a: KPIMap, b: KPIMap): KPIMap {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   const out: KPIMap = {};
   keys.forEach((k) => {
-    const av = a[k] ?? 0;
-    const bv = b[k] ?? 0;
-    out[k] = av - bv;
+    const av = toNum(a[k]);
+    const bv = toNum(b[k]);
+    out[k] = (Number.isFinite(av) ? av : 0) - (Number.isFinite(bv) ? bv : 0);
   });
   return out;
+}
+function toNum(v: any): number {
+  if (typeof v === "number") return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
 }
