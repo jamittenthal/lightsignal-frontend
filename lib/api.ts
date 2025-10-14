@@ -89,30 +89,38 @@ export const callOrchestrator = async (
   return { parsed, text };
 };
 
-/** Legacy pages expect { parsed, text } from chatOrchestrator (single question) */
+/**
+ * Legacy pages call chatOrchestrator with either:
+ *  - a string question, OR
+ *  - ChatMessage[] transcript (your /scenarios page)
+ *
+ * We accept both and return { parsed, text, message } where message is the assistant reply.
+ */
 export const chatOrchestrator = async (
-  question: string,
+  input: string | ChatMessage[],
   company_id = "demo",
   extras: Record<string, any> = {}
-): Promise<{ parsed: any; text: string }> => {
-  const resp = await callIntent("scenario_chat", { question, ...extras }, company_id);
+): Promise<{ parsed: any; text: string; message: ChatMessage }> => {
+  const messages = Array.isArray(input) ? input : undefined;
+  const question =
+    typeof input === "string"
+      ? input
+      : [...input].reverse().find((m) => m.role === "user")?.content || "";
+
+  const resp = await callIntent("scenario_chat", { question, messages, ...extras }, company_id);
   const parsed = resp.result;
   const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
-  return { parsed, text };
+  const message: ChatMessage = { role: "assistant", content: text };
+  return { parsed, text, message };
 };
 
-/** Optional: messages-based helper if a page sends a transcript */
+/** Optional: messages-based helper name used elsewhere (same behavior as above) */
 export const chatOrchestratorMessages = async (
   messages: ChatMessage[],
   company_id = "demo",
   extras: Record<string, any> = {}
-): Promise<{ parsed: any; text: string }> => {
-  const lastUser = [...messages].reverse().find(m => m.role === "user")?.content || "";
-  const resp = await callIntent("scenario_chat", { question: lastUser, messages, ...extras }, company_id);
-  const parsed = resp.result;
-  const text = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
-  return { parsed, text };
-};
+): Promise<{ parsed: any; text: string; message: ChatMessage }> =>
+  chatOrchestrator(messages, company_id, extras);
 
 /**
  * Older /insights page expects:
