@@ -5,9 +5,12 @@ import { callOrchestrator } from "../../lib/api";
 import KpiCard from "@/components/KpiCard";
 import { ProvenanceBadge } from "@/components/ProvenanceBadge";
 
+type KPIs = Record<string, unknown>;
+type Benchmark = { metric: string; value?: number; peer_percentile?: number };
+
 export default function Overview() {
-  const [kpis, setKpis] = useState<any>(null);
-  const [benchmarks, setBenchmarks] = useState<any[]>([]);
+  const [kpis, setKpis] = useState<KPIs | null>(null);
+  const [benchmarks, setBenchmarks] = useState<Benchmark[]>([]);
   const [insights, setInsights] = useState<string[] | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,10 +21,15 @@ export default function Overview() {
         setLoading(true);
         const res = await callOrchestrator("render_financial_overview for company_id=demo");
 
-        const parsed = res.parsed || {};
-        setKpis(parsed.kpis || parsed.base?.kpis || {});
-        setBenchmarks(parsed.benchmarks || []);
-        setInsights(parsed.insights || []);
+        const parsed = (res.parsed ?? {}) as any;
+        // support both shapes: {kpis:{...}} OR {base:{kpis:{...}}}
+        const k = parsed?.kpis || parsed?.base?.kpis || {};
+        const bms: Benchmark[] = Array.isArray(parsed?.benchmarks) ? parsed.benchmarks : [];
+        const ins: string[] | undefined = Array.isArray(parsed?.insights) ? parsed.insights : undefined;
+
+        setKpis(k as KPIs);
+        setBenchmarks(bms);
+        setInsights(ins);
       } catch (err) {
         console.error("Error loading overview:", err);
         setError("Failed to load financial overview.");
@@ -52,10 +60,10 @@ export default function Overview() {
         Financial Overview
       </h1>
 
-      {kpis ? (
+      {kpis && Object.keys(kpis).length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Object.entries(kpis).map(([key, value]) => (
-            <KpiCard key={key} label={key} value={value} />
+          {Object.entries(kpis as Record<string, unknown>).map(([key, value]) => (
+            <KpiCard key={key} label={String(key)} value={value as any} />
           ))}
         </div>
       ) : (
@@ -79,10 +87,10 @@ export default function Overview() {
                   {b.metric}
                 </div>
                 <div className="text-xl font-semibold">
-                  {b.value ?? "—"}
+                  {typeof b.value === "number" ? b.value : "—"}
                 </div>
                 <div className="text-xs text-slate-400">
-                  Peer percentile: {b.peer_percentile ?? "—"}%
+                  Peer percentile: {typeof b.peer_percentile === "number" ? b.peer_percentile : "—"}%
                 </div>
               </div>
             ))}
