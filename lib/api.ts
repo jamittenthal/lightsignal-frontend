@@ -25,6 +25,7 @@ async function getJSON<T = any>(path: string): Promise<T> {
   return res.json();
 }
 
+/** ---- PRIMARY INTENT HELPER ---- */
 export async function callIntent(
   intent: string,
   input: Record<string, any> = {},
@@ -33,22 +34,54 @@ export async function callIntent(
   return postJSON("/api/intent", { intent, company_id, input });
 }
 
-// Profile
+/** ---- DIRECT BACKEND HELPERS (existing endpoints) ---- */
+export const callOverview = (company_id = "demo", periods = 12) =>
+  postJSON("/api/overview", { company_id, periods });
+
+export const callScenario = (company_id = "demo", inputs: Record<string, any> = {}) =>
+  postJSON("/api/scenario", { company_id, inputs });
+
+/** ---- OPPORTUNITY PROFILE ---- */
 export const getOpportunityProfile = (company_id = "demo") =>
   getJSON(`/api/opportunity_profile/${company_id}`);
+
 export const upsertOpportunityProfile = (payload: any) =>
   postJSON("/api/opportunity_profile", payload);
 
-// Watchlist
+/** ---- WATCHLIST ---- */
 export const listWatchlist = (company_id = "demo") =>
   getJSON(`/api/watchlist/${company_id}`);
+
 export const addToWatchlist = (payload: any) =>
   postJSON("/api/watchlist/add", payload);
+
 export const updateWatchItem = (payload: any) =>
   postJSON("/api/watchlist/update", payload);
 
-// Simulate & Export
+/** ---- SIMULATE & EXPORT ---- */
 export const simulateOpportunity = (opportunity: any, company_id = "demo") =>
   postJSON("/api/opportunities/simulate", { company_id, opportunity });
+
 export const exportCSVUrl = (company_id = "demo") =>
   `${API_BASE}/api/opportunities/export.csv?company_id=${encodeURIComponent(company_id)}`;
+
+/* ======================================================================
+   LEGACY SHIMS (to keep /insights, /overview, /scenarios pages compiling)
+   Keep these until those pages are migrated to the new helpers.
+   ====================================================================== */
+
+/** Old: callResearch(query, region?) -> now routes to intent "research_digest" */
+export async function callResearch(query: string, region?: string, company_id = "demo") {
+  return callIntent("research_digest", { query, region }, company_id);
+}
+
+/** Old: callOrchestrator(intent, input?) -> just forwards to callIntent */
+export async function callOrchestrator(intent: string, input: Record<string, any> = {}, company_id = "demo") {
+  return callIntent(intent, input, company_id);
+}
+
+/** Old: chatOrchestrator(message) -> send to /api/scenario as free-form scenario */
+export async function chatOrchestrator(message: string, company_id = "demo") {
+  // We treat it as a scenario chat; your backend /api/scenario already exists.
+  return callScenario(company_id, { message });
+}
