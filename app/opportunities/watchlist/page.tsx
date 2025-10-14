@@ -15,7 +15,10 @@ export default function WatchlistPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    load();
+  }, []);
 
   async function setStatus(id: string, status: string) {
     await updateWatchItem({ company_id: "demo", id, status });
@@ -41,8 +44,14 @@ export default function WatchlistPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <Th>Title</Th><Th>Category</Th><Th>Date</Th><Th>Deadline</Th>
-                <Th>Fit</Th><Th>ROI</Th><Th>Status</Th><Th>Actions</Th>
+                <Th>Title</Th>
+                <Th>Category</Th>
+                <Th>Date</Th>
+                <Th>Deadline</Th>
+                <Th>Fit</Th>
+                <Th>ROI</Th>
+                <Th>Status</Th>
+                <Th>Actions</Th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -52,13 +61,18 @@ export default function WatchlistPage() {
                   <Td>{r.category}</Td>
                   <Td>{r.date || "—"}</Td>
                   <Td>{r.deadline || "—"}</Td>
-                  <Td>{typeof r.fit_score === "number" ? (r.fit_score*100).toFixed(0)+"%" : "—"}</Td>
-                  <Td>{typeof r.roi_est === "number" ? (r.roi_est*100).toFixed(0)+"%" : "—"}</Td>
+                  <Td>{typeof r.fit_score === "number" ? (r.fit_score * 100).toFixed(0) + "%" : "—"}</Td>
+                  <Td>{typeof r.roi_est === "number" ? (r.roi_est * 100).toFixed(0) + "%" : "—"}</Td>
                   <Td>{r.status}</Td>
                   <Td className="space-x-2">
-                    {["Open","Applied","Attended","Won","Lost","Closed"].map(s => (
-                      <button key={s} onClick={() => setStatus(r.id, s)}
-                        className="px-2 py-1 rounded border text-xs">{s}</button>
+                    {["Open", "Applied", "Attended", "Won", "Lost", "Closed"].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setStatus(r.id, s)}
+                        className="px-2 py-1 rounded border text-xs"
+                      >
+                        {s}
+                      </button>
                     ))}
                   </Td>
                 </tr>
@@ -71,5 +85,9 @@ export default function WatchlistPage() {
   );
 }
 
-function Th({ children }: { children: any }) { return <th className="text-left px-3 py-2 text-xs font-semibold">{children}</th>; }
-function Td({ children }: { children: any }) { return <td className="px-3 py-2">{children}</td>; }
+function Th({ children, className = "" }: { children: any; className?: string }) {
+  return <th className={`text-left px-3 py-2 text-xs font-semibold ${className}`}>{children}</th>;
+}
+function Td({ children, className = "" }: { children: any; className?: string }) {
+  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+}
