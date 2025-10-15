@@ -1,0 +1,6 @@
+# ai/orchestrator.yaml
+name: "LightSignal Orchestrator"
+global_rules:
+  - "Always return STRICT JSON (no extra text)."
+  - "Explain assumptions in a 'notes' field."
+  - "Tag data sources (quickbooks, peers, manual) in a 'provenance' field when possible."
