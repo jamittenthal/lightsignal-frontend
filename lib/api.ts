@@ -1,13 +1,11 @@
 // lib/api.ts
-// One place for frontend -> backend/API helpers.
-// - Uses your backend: https://lightsignal-backend.onrender.com
-// - Provides client-side stubs (localStorage) for features without backend endpoints yet.
+// Frontend -> backend helpers + safe stubs so the app builds/runs now.
 
 export const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "https://lightsignal-backend.onrender.com";
 
 // -------------------------
-// Generic helpers
+// Internals
 // -------------------------
 async function postJSON<T = any>(url: string, body: any): Promise<T> {
   const res = await fetch(url, {
@@ -23,14 +21,56 @@ async function postJSON<T = any>(url: string, body: any): Promise<T> {
   return (await res.json()) as T;
 }
 
+function normalizeIntentArgs(
+  a?: string | Record<string, any>,
+  b?: string | Record<string, any>
+): { companyId: string; input: Record<string, any> } {
+  // Accept both callIntent(intent, "demo", {...}) and callIntent(intent, {...}, "demo")
+  let companyId = "demo";
+  let input: Record<string, any> = {};
+
+  const isStr = (v: any): v is string => typeof v === "string";
+  const isObj = (v: any): v is Record<string, any> =>
+    v != null && typeof v === "object" && !Array.isArray(v);
+
+  if (isStr(a) && (isObj(b) || b === undefined)) {
+    companyId = a;
+    input = (b as Record<string, any>) || {};
+  } else if ((isObj(a) || a === undefined) && (isStr(b) || b === undefined)) {
+    input = (a as Record<string, any>) || {};
+    companyId = (b as string) || "demo";
+  } else if (a === undefined && b === undefined) {
+    // default ok
+  } else {
+    // Fallback: try to coerce
+    if (isObj(a)) input = a;
+    if (isStr(a)) companyId = a;
+    if (isObj(b)) input = b;
+    if (isStr(b)) companyId = b;
+  }
+  return { companyId, input };
+}
+
 // -------------------------
-// Core intent call
+// Core intent calls (supports both arg orders)
 // -------------------------
-export async function callIntent(
+// Overloads for TS friendliness:
+export function callIntent(
   intent: string,
-  companyId: string = "demo",
-  input: any = {}
-) {
+  companyId?: string,
+  input?: Record<string, any>
+): Promise<any>;
+export function callIntent(
+  intent: string,
+  input?: Record<string, any>,
+  companyId?: string
+): Promise<any>;
+export function callIntent(
+  intent: string,
+  a?: string | Record<string, any>,
+  b?: string | Record<string, any>
+): Promise<any> {
+  const { companyId, input } = normalizeIntentArgs(a, b);
   return postJSON(`${BACKEND_URL}/api/intent`, {
     intent,
     company_id: companyId,
@@ -38,37 +78,37 @@ export async function callIntent(
   });
 }
 
-// Aliases some pages expect
-export async function callOrchestrator(
+export function callOrchestrator(
   intent: string,
-  companyId: string = "demo",
-  input: any = {}
-) {
+  companyId?: string,
+  input?: Record<string, any>
+): Promise<any>;
+export function callOrchestrator(
+  intent: string,
+  input?: Record<string, any>,
+  companyId?: string
+): Promise<any>;
+export function callOrchestrator(
+  intent: string,
+  a?: string | Record<string, any>,
+  b?: string | Record<string, any>
+): Promise<any> {
+  const { companyId, input } = normalizeIntentArgs(a, b);
   return callIntent(intent, companyId, input);
 }
 
-export async function chatOrchestrator(
-  message: string,
-  companyId: string = "demo"
-) {
-  // Simple “chat” shim: route via business_insights so you can test now.
+// Simple chat shim (routes through business_insights so you can test now)
+export async function chatOrchestrator(message: string, companyId = "demo") {
   return callIntent("business_insights", companyId, { query: message });
 }
 
-// -------------------------
-// Insights / Research (pages import callResearch)
-// -------------------------
-export async function callResearch(
-  query: string,
-  companyId: string = "demo"
-) {
-  // Route to business_insights intent with a query input (works for now)
+// Insights / “Research”
+export async function callResearch(query: string, companyId = "demo") {
   return callIntent("business_insights", companyId, { query });
 }
 
 // -------------------------
-// Opportunities helpers
-// (these pages already import the following names)
+// Opportunities helpers (stubs for now; swap to backend later)
 // -------------------------
 type WatchItem = {
   id: string;
@@ -102,8 +142,7 @@ export function exportCSVUrl(
   companyId: string = "demo",
   intent: string = "opportunities"
 ) {
-  // If/when you add a real backend export route, update this.
-  // For now, return a placeholder that won’t crash the UI if clicked.
+  // Placeholder URL so UI doesn't break; point to real backend route later
   return `${BACKEND_URL}/api/export.csv?company_id=${encodeURIComponent(
     companyId
   )}&intent=${encodeURIComponent(intent)}`;
@@ -115,8 +154,8 @@ export async function listWatchlist(): Promise<WatchItem[]> {
 
 export async function addToWatchlist(item: WatchItem): Promise<WatchItem[]> {
   const list = readLocal<WatchItem[]>(WATCHLIST_KEY, []);
-  const existingIdx = list.findIndex((w) => w.id === item.id);
-  if (existingIdx >= 0) list[existingIdx] = { ...list[existingIdx], ...item };
+  const idx = list.findIndex((w) => w.id === item.id);
+  if (idx >= 0) list[idx] = { ...list[idx], ...item };
   else list.push(item);
   writeLocal(WATCHLIST_KEY, list);
   return list;
@@ -135,7 +174,6 @@ export async function updateWatchItem(
   return list;
 }
 
-// Simulate an opportunity (send to scenario planning)
 export async function simulateOpportunity(
   scenarioName: string,
   levers: Array<{ lever: string; delta_pct?: number; delta_abs?: number }>,
@@ -147,7 +185,6 @@ export async function simulateOpportunity(
   });
 }
 
-// Opportunity Profile (client-side stub for now)
 type OpportunityProfile = {
   id: string;
   company?: string;
