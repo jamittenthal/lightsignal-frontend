@@ -1,0 +1,59 @@
+name: Auto PR UI
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+on:
+  workflow_dispatch: {}
+  issues:
+    types: [opened, edited, labeled]
+
+concurrency:
+  group: auto-pr-ui-${{ github.event.issue.number || 'manual' }}
+  cancel-in-progress: true
+
+jobs:
+  open-pr:
+    # Run when the issue HAS the 'build' label (at creation, edit, or when label is added)
+    if: >
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'issues' && (
+        (github.event.action == 'labeled' && github.event.label.name == 'build') ||
+        (github.event.action != 'labeled' && contains(toJson(github.event.issue.labels), 'build')
+      )))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate page from issue
+        run: node ops/make_tab_page.js
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "feat(ui): page from issue #${{ github.event.issue.number || 'manual' }}"
+          branch: auto/ui-${{ github.event.issue.number || 'manual' }}
+          title: "Auto PR (UI): ${{ github.event.issue.title || 'Manual run' }}"
+          body: |
+            Auto-generated from issue #${{ github.event.issue.number || 'manual' }}.
+            Creates/updates a Next.js page for the requested route and intent.
+
+            If your project uses the App Router, the page is created under /app/<route>/page.tsx.
+            If it uses the Pages Router, the page is created under /pages/<route>.tsx.
+          add-paths: |
+            app/**
+            pages/**
+            lib/**
+            ops/make_tab_page.js
+          labels: |
+            build
