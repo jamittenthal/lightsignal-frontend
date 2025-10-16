@@ -54,7 +54,6 @@ function normalizeIntentArgs(
 // -------------------------
 // Core intent calls (supports both arg orders)
 // -------------------------
-// Overloads for TS friendliness:
 export function callIntent(
   intent: string,
   companyId?: string,
@@ -110,13 +109,18 @@ export async function callResearch(query: string, companyId = "demo") {
 // -------------------------
 // Opportunities helpers (stubs for now; swap to backend later)
 // -------------------------
-type WatchItem = {
-  id: string;
+// Make this permissive so object literals with extra fields compile.
+export type WatchItem = {
+  id?: string;
+  company_id?: string;
   title?: string;
   category?: string;
+  deadline?: string;
+  date?: string;
   notes?: string;
   pinned?: boolean;
   meta?: Record<string, any>;
+  [key: string]: any; // allow additional properties (e.g., fit_score, roi_est, etc.)
 };
 
 const WATCHLIST_KEY = "ls_watchlist";
@@ -154,9 +158,14 @@ export async function listWatchlist(): Promise<WatchItem[]> {
 
 export async function addToWatchlist(item: WatchItem): Promise<WatchItem[]> {
   const list = readLocal<WatchItem[]>(WATCHLIST_KEY, []);
-  const idx = list.findIndex((w) => w.id === item.id);
-  if (idx >= 0) list[idx] = { ...list[idx], ...item };
-  else list.push(item);
+  // Use a stable id if present; otherwise derive one from title+deadline to avoid duplicates
+  const id =
+    item.id ||
+    (item.title ? `${item.title}-${item.deadline || item.date || ""}` : undefined);
+  const idx = id ? list.findIndex((w) => w.id === id) : -1;
+  const toStore = { ...item, id };
+  if (idx >= 0) list[idx] = { ...list[idx], ...toStore };
+  else list.push(toStore);
   writeLocal(WATCHLIST_KEY, list);
   return list;
 }
@@ -185,11 +194,12 @@ export async function simulateOpportunity(
   });
 }
 
-type OpportunityProfile = {
+export type OpportunityProfile = {
   id: string;
   company?: string;
   summary?: string;
   fields?: Record<string, any>;
+  [key: string]: any;
 };
 
 export async function getOpportunityProfile(
