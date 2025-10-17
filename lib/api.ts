@@ -1,9 +1,19 @@
-// lib/api.ts — minimal but complete helpers so Next.js builds on Vercel
+// lib/api.ts — helpers the UI imports. Safe for Vercel builds (SSR/CSR).
 
 export const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "https://lightsignal-backend.onrender.com";
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://lightsignal-backend.onrender.com";
 
-// ---- internals
+type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
+interface JSONObject { [k: string]: JSONValue; }
+interface JSONArray extends Array<JSONValue> {}
+
+// ---------- low-level HTTP ----------
+async function getJSON<T = any>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`GET ${url} failed (${res.status})`);
+  return (await res.json()) as T;
+}
 async function postJSON<T = any>(url: string, body: any): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -12,28 +22,42 @@ async function postJSON<T = any>(url: string, body: any): Promise<T> {
     cache: "no-store",
   });
   if (!res.ok) {
-    const text = await res.text();
+    const text = await res.text().catch(() => "");
     throw new Error(`POST ${url} failed (${res.status}): ${text}`);
   }
   return (await res.json()) as T;
 }
+async function patchJSON<T = any>(url: string, body: any): Promise<T> {
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`PATCH ${url} failed (${res.status}): ${text}`);
+  }
+  return (await res.json()) as T;
+}
 
+// ---------- callIntent with flexible arg order ----------
 function normalizeIntentArgs(
-  a?: string | Record<string, any>,
-  b?: string | Record<string, any>
-): { companyId: string; input: Record<string, any> } {
-  // accept both: callIntent(intent, "demo", {...})  OR  callIntent(intent, {...}, "demo")
+  a?: string | JSONObject,
+  b?: string | JSONObject
+): { companyId: string; input: JSONObject } {
   let companyId = "demo";
-  let input: Record<string, any> = {};
+  let input: JSONObject = {};
   const isStr = (v: any): v is string => typeof v === "string";
-  const isObj = (v: any): v is Record<string, any> =>
+  const isObj = (v: any): v is JSONObject =>
     v != null && typeof v === "object" && !Array.isArray(v);
 
+  // Accept both: (intent, "demo", {...}) OR (intent, {...}, "demo")
   if (isStr(a) && (isObj(b) || b === undefined)) {
     companyId = a;
-    input = (b as Record<string, any>) || {};
+    input = (b as JSONObject) || {};
   } else if ((isObj(a) || a === undefined) && (isStr(b) || b === undefined)) {
-    input = (a as Record<string, any>) || {};
+    input = (a as JSONObject) || {};
     companyId = (b as string) || "demo";
   } else {
     if (isObj(a)) input = a;
@@ -44,21 +68,20 @@ function normalizeIntentArgs(
   return { companyId, input };
 }
 
-// ---- core calls used everywhere
 export function callIntent(
   intent: string,
   companyId?: string,
-  input?: Record<string, any>
+  input?: JSONObject
 ): Promise<any>;
 export function callIntent(
   intent: string,
-  input?: Record<string, any>,
+  input?: JSONObject,
   companyId?: string
 ): Promise<any>;
 export function callIntent(
   intent: string,
-  a?: string | Record<string, any>,
-  b?: string | Record<string, any>
+  a?: string | JSONObject,
+  b?: string | JSONObject
 ): Promise<any> {
   const { companyId, input } = normalizeIntentArgs(a, b);
   return postJSON(`${BACKEND_URL}/api/intent`, {
@@ -70,19 +93,9 @@ export function callIntent(
 
 export function callOrchestrator(
   intent: string,
-  companyId?: string,
-  input?: Record<string, any>
-): Promise<any>;
-export function callOrchestrator(
-  intent: string,
-  input?: Record<string, any>,
-  companyId?: string
-): Promise<any>;
-export function callOrchestrator(
-  intent: string,
-  a?: string | Record<string, any>,
-  b?: string | Record<string, any>
-): Promise<any> {
+  a?: string | JSONObject,
+  b?: string | JSONObject
+) {
   return callIntent(intent, a as any, b as any);
 }
 
@@ -93,10 +106,10 @@ export async function callResearch(query: string, companyId = "demo") {
   return callIntent("business_insights", companyId, { query });
 }
 
-// ---- opportunities helpers (safe stubs so build never breaks)
+// ---------- Opportunities helpers (watchlist + CSV) ----------
 export type WatchItem = {
   id?: string;
-  company_id?: string;
+  company_id?: string; // keep optional to avoid TS complaints in UI
   title?: string;
   category?: string;
   date?: string;
@@ -116,30 +129,47 @@ export function exportCSVUrl(
   )}&intent=${encodeURIComponent(intent)}`;
 }
 
-export async function listWatchlist(): Promise<WatchItem[]> {
-  return [];
+// Prefer backend routes if present; fall back to safe no-ops so builds never break.
+export async function listWatchlist(companyId: string = "demo"): Promise<WatchItem[]> {
+  try {
+    return await getJSON<WatchItem[]>(
+      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`
+    );
+  } catch {
+    return [] as WatchItem[];
+  }
 }
-export async function addToWatchlist(item: WatchItem): Promise<WatchItem[]> {
-  return [item];
+export async function addToWatchlist(
+  item: WatchItem,
+  companyId: string = "demo"
+): Promise<WatchItem[]> {
+  try {
+    return await postJSON<WatchItem[]>(
+      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`,
+      item
+    );
+  } catch {
+    return [item] as WatchItem[];
+  }
 }
 export async function updateWatchItem(
   id: string,
-  patch: Partial<WatchItem>
-): Promise<WatchItem[]> {
-  return [];
-}
-
-export async function simulateOpportunity(
-  scenarioName: string,
-  levers: Array<{ lever: string; delta_pct?: number; delta_abs?: number }>,
+  patch: Partial<WatchItem>,
   companyId: string = "demo"
-) {
-  return callIntent("scenario_planning_lab", companyId, {
-    scenario_name: scenarioName,
-    levers,
-  });
+): Promise<WatchItem[]> {
+  try {
+    return await patchJSON<WatchItem[]>(
+      `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
+        id
+      )}?company_id=${encodeURIComponent(companyId)}`,
+      patch
+    );
+  } catch {
+    return [] as WatchItem[];
+  }
 }
 
+// ---------- Opportunity profiles (safe stubs until server route exists) ----------
 export type OpportunityProfile = {
   id: string;
   company?: string;
@@ -147,12 +177,49 @@ export type OpportunityProfile = {
   fields?: Record<string, any>;
   [k: string]: any;
 };
-export async function getOpportunityProfile(id: string) {
-  return null as OpportunityProfile | null;
+
+export async function getOpportunityProfile(
+  id: string,
+  _companyId: string = "demo"
+): Promise<OpportunityProfile | null> {
+  // no server route yet; keep stub so UI compiles
+  return null;
 }
 export async function upsertOpportunityProfile(
   id: string,
-  profile: OpportunityProfile
-) {
-  return { id, ...profile } as OpportunityProfile;
+  profile: OpportunityProfile,
+  _companyId: string = "demo"
+): Promise<OpportunityProfile> {
+  // stub returns merged object
+  return { id, ...profile };
+}
+
+// ---------- Scenario Lab: accept BOTH call styles ----------
+/**
+ * Accepts:
+ *   1) simulateOpportunity("Price +5%", [{ lever: "price", delta_pct: 5 }], "demo")
+ *   2) simulateOpportunity(itemObject, "demo")  // item has title/name
+ */
+export async function simulateOpportunity(a: any, b?: any, c?: any) {
+  let scenario_name = "Quick Sim";
+  let companyId = "demo";
+  let levers: Array<{ lever: string; delta_pct?: number; delta_abs?: number }> = [];
+
+  if (typeof a === "string" && Array.isArray(b)) {
+    // Style #1: (name, levers[], companyId?)
+    scenario_name = a;
+    levers = b;
+    companyId = typeof c === "string" ? c : "demo";
+  } else {
+    // Style #2: (itemObject, companyId?)
+    const item = a || {};
+    scenario_name = item.title || item.name || "Quick Sim";
+    companyId = typeof b === "string" ? b : "demo";
+    // quick simulate: no explicit levers array
+  }
+
+  return callIntent("scenario_planning_lab", companyId, {
+    scenario_name,
+    levers,
+  });
 }
