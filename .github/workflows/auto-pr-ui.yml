@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   build-ui:
-    # Run only for open issues that either start with "Build: " or have the "build-request" label
     if: >
       github.event.issue.state == 'open' &&
       (startsWith(github.event.issue.title, 'Build: ') ||
@@ -21,7 +20,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Capture title/body safely, and parse intent/route from the title.
       - name: Capture & parse issue meta
         id: meta
         env:
@@ -32,9 +30,7 @@ jobs:
           printf '%s' "$ISSUE_TITLE" > issue_title.txt
           printf '%s' "$ISSUE_BODY"  > issue_body.txt
 
-          # Expect: "Build: <intent> | <route> | <ui title>"
           STRIPPED="$(sed -n 's/^Build:[[:space:]]*//p' issue_title.txt)"
-
           INTENT="$(printf '%s' "$STRIPPED" | cut -d '|' -f1 | xargs)"
           ROUTE="$(printf  '%s' "$STRIPPED" | cut -d '|' -f2 | xargs)"
           UITITLE="$(printf '%s' "$STRIPPED" | cut -d '|' -f3- | xargs)"
@@ -51,19 +47,25 @@ jobs:
           test -n "${{ steps.meta.outputs.intent }}" || (echo "Missing intent in title"; exit 1)
           test -n "${{ steps.meta.outputs.route }}"  || (echo "Missing route in title"; exit 1)
 
-      - name: Scaffold UI (page + plan)
+      - name: Scaffold UI (page + plan) with guaranteed diff
         env:
           ROUTE: ${{ steps.meta.outputs.route }}
         run: |
           set -eu
-          mkdir -p "ops"
-          # Save the issue body verbatim as a plan file (no heredocs)
-          cp issue_body.txt "ops/ui-plan-${ROUTE:-unknown}.md"
+          mkdir -p ops
+          PLAN="ops/ui-plan-${ROUTE:-unknown}.md"
+          if [ -f "$PLAN" ]; then
+            # keep previous content; just add a fresh marker so there's always a change
+            printf '\n<!-- refresh:%s -->\n' "$GITHUB_RUN_ID" >> "$PLAN"
+          else
+            cp issue_body.txt "$PLAN"
+            printf '\n<!-- refresh:%s -->\n' "$GITHUB_RUN_ID" >> "$PLAN"
+          fi
 
-          # Make the page if it doesn't exist (write with printf, no heredocs)
           PAGE_DIR="app/${ROUTE}"
           mkdir -p "$PAGE_DIR"
-          if [ ! -f "$PAGE_DIR/page.tsx" ]; then
+          PAGE="$PAGE_DIR/page.tsx"
+          if [ ! -f "$PAGE" ]; then
             {
               printf '%s\n' '"use client";'
               printf '%s\n' 'import React from "react";'
@@ -76,8 +78,12 @@ jobs:
               printf '%s\n' '    </div>'
               printf '%s\n' '  );'
               printf '%s\n' '}'
-            } > "$PAGE_DIR/page.tsx"
+            } > "$PAGE"
           fi
+          # always append a harmless marker line so there's a diff
+          printf '\n// autoprlast:%s\n' "$GITHUB_RUN_ID" >> "$PAGE"
+
+          git status --porcelain
 
       - name: Create PR
         uses: peter-evans/create-pull-request@v6
@@ -85,6 +91,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ format('auto/ui-{0}', github.run_id) }}
           base: main
+          add-paths: |
+            ops/**
+            app/**
           commit-message: "feat(ui): scaffold ${{ steps.meta.outputs.route }} from issue #${{ github.event.issue.number }}"
           title: "PR: ${{ steps.meta.outputs.route }} — build from issue #${{ github.event.issue.number }}"
           body: |
