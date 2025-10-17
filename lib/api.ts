@@ -169,7 +169,7 @@ export async function updateWatchItem(
   }
 }
 
-// ---------- Opportunity profiles (safe stubs until server route exists) ----------
+// ---------- Opportunity profiles (make calls flexible) ----------
 export type OpportunityProfile = {
   id: string;
   company?: string;
@@ -178,19 +178,40 @@ export type OpportunityProfile = {
   [k: string]: any;
 };
 
+// Accepts: getOpportunityProfile("id", "demo") OR getOpportunityProfile({id:"id"}, "demo")
 export async function getOpportunityProfile(
-  id: string,
-  _companyId: string = "demo"
+  a: string | { id: string },
+  b?: string
 ): Promise<OpportunityProfile | null> {
+  const id = typeof a === "string" ? a : a?.id;
+  const _companyId = typeof b === "string" ? b : "demo";
   // no server route yet; keep stub so UI compiles
-  return null;
+  return { id, summary: "stub", fields: {} };
 }
+
+// Accepts BOTH: upsertOpportunityProfile("id", profile, "demo") AND upsertOpportunityProfile(profile, "demo")
 export async function upsertOpportunityProfile(
-  id: string,
-  profile: OpportunityProfile,
-  _companyId: string = "demo"
+  a: any,
+  b?: any,
+  c?: any
 ): Promise<OpportunityProfile> {
-  // stub returns merged object
+  let id: string = "draft";
+  let profile: OpportunityProfile = { id: "draft" };
+  let _companyId = "demo";
+
+  if (typeof a === "string") {
+    // style: (id, profile, companyId?)
+    id = a;
+    profile = (b || {}) as OpportunityProfile;
+    _companyId = typeof c === "string" ? c : "demo";
+  } else {
+    // style: (profileObj, companyId?)
+    const p = (a || {}) as OpportunityProfile;
+    id = p.id || "draft";
+    profile = p;
+    _companyId = typeof b === "string" ? b : "demo";
+  }
+  // Stub returns merged object
   return { id, ...profile };
 }
 
