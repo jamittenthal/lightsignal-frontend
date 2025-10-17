@@ -107,11 +107,25 @@ export function callOrchestrator(
   return callIntent(intent, a as any, b as any);
 }
 
-export async function chatOrchestrator(message: string, companyId = "demo") {
-  return callIntent("business_insights", companyId, { query: message });
-}
+// ---------- Chat helpers ----------
 export async function callResearch(query: string, companyId = "demo") {
   return callIntent("business_insights", companyId, { query });
+}
+
+// Overload so pages can pass either a string or a ChatMessage[]
+export async function chatOrchestrator(
+  messages: string | ChatMessage[],
+  companyId: string = "demo"
+) {
+  if (typeof messages === "string") {
+    return callIntent("business_insights", companyId, { query: messages });
+  }
+  // Normalize ChatMessage[] -> transcript array {role, content}
+  const transcript = (messages || []).map((m) => ({
+    role: m.role,
+    content: m.text ?? m.content ?? "",
+  }));
+  return callIntent("business_insights", companyId, { transcript });
 }
 
 // ---------- Opportunities helpers (watchlist + CSV) ----------
