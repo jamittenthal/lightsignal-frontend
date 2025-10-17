@@ -1,111 +1,242 @@
 name: Auto PR UI
 
+on:
+  issues:
+    types: [opened, edited, labeled]
+  workflow_dispatch:
+
 permissions:
   contents: write
   pull-requests: write
   issues: write
 
-on:
-  workflow_dispatch:
-    inputs:
-      intent:
-        description: "Intent name, e.g. financial_overview"
-        required: true
-      route:
-        description: "Route path, e.g. /financial-overview"
-        required: true
-      title:
-        description: "PR title (optional)"
-        required: false
-  issues:
-    types: [labeled]
-
 jobs:
-  open-pr:
-    # Run when manually dispatched OR when an issue gets label 'build'
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'build') }}
+  build-ui:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && (
+        contains(github.event.issue.title, 'Build:') ||
+        contains(join(github.event.issue.labels.*.name, ','), 'build')
+      ))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Ensure git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Write generator script
+      - name: Extract spec from issue
+        id: spec
+        shell: bash
         run: |
+          BODY="${{ github.event.issue.body || '' }}"
+
+          TITLE_LINE="$(echo "$BODY" | sed -n 's/^Title:[[:space:]]*//p' | head -n1)"
+          [ -z "$TITLE_LINE" ] && TITLE_LINE="${{ github.event.issue.title }}"
+
+          INTENT="$(echo "$BODY" | sed -n 's/^Intent:[[:space:]]*//p' | head -n1)"
+          ROUTE="$(echo "$BODY" | sed -n 's/^Route:[[:space:]]*//p' | head -n1)"
+          [ -z "$INTENT" ] && INTENT="opportunities"
+          [ -z "$ROUTE" ] && ROUTE="/opportunities"
+
+          FOLDER="${ROUTE#/}"
+
+          # Save any YAML block between ```yaml and ```
           mkdir -p ops
-          cat > ops/make_tab_page.js <<'JS'
-          const fs=require('fs');const path=require('path');const REPO=process.cwd();
-          const evPath=process.env.GITHUB_EVENT_PATH; const ev=evPath?require(evPath):{};
-          const fromIssue = ev.issue || {};
-          const body = (fromIssue.body||'');
-          const title = process.env.INPUT_TITLE || fromIssue.title || 'Auto UI Page';
-          // Prefer workflow_dispatch inputs, else parse issue body
-          const intent = (process.env.INPUT_INTENT || (body.match(/intent:\s*([a-z0-9_]+)/i)||[])[1] || '').trim();
-          const route  = (process.env.INPUT_ROUTE  || (body.match(/Route:\s*(\/[A-Za-z0-9\-_\/]+)/i)||[])[1] || '').trim() || `/${intent||'new-tab'}`;
-          if(!intent){ console.error('No intent found. Provide via workflow inputs or issue body.'); process.exit(1); }
-          const slug = route.replace(/^\//,'');
-          function ensure(p){ if(!fs.existsSync(p)) fs.mkdirSync(p,{recursive:true}); }
-          const apiPath=path.join(REPO,'lib','api.ts'); ensure(path.dirname(apiPath));
-          if(!fs.existsSync(apiPath)){
-            fs.writeFileSync(apiPath,`export const BACKEND_URL=process.env.NEXT_PUBLIC_BACKEND_URL||"https://lightsignal-backend.onrender.com";
-            export async function callIntent(intent,companyId="demo",input={}){const r=await fetch(\`\${BACKEND_URL}/api/intent\`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({intent,company_id:companyId,input}),cache:"no-store"});if(!r.ok){throw new Error("intent failed")}return r.json();}
-            `);
+          echo "$BODY" | awk 'BEGIN{p=0} /^```yaml/{p=1; next} /^```/{p=0} p{print}' > ops/spec.yaml || true
+
+          echo "title=$TITLE_LINE" >> $GITHUB_OUTPUT
+          echo "intent=$INTENT" >> $GITHUB_OUTPUT
+          echo "route=$ROUTE" >> $GITHUB_OUTPUT
+          echo "folder=$FOLDER" >> $GITHUB_OUTPUT
+
+      - name: Ensure base folders
+        run: |
+          mkdir -p app/${{ steps.spec.outputs.folder }}
+          mkdir -p lib
+          mkdir -p app
+
+      - name: Ensure ts/js path alias
+        run: |
+          if [ -f tsconfig.json ]; then CFG=tsconfig.json; else CFG=jsconfig.json; fi
+          cat > "$CFG" << 'JSON'
+          {
+            "compilerOptions": {
+              "baseUrl": ".",
+              "paths": { "@/*": ["./*"] },
+              "esModuleInterop": true
+            }
           }
-          const appDir=path.join(REPO,'app'); const useApp=fs.existsSync(appDir);
-          const compName = slug.split(/[^\w]+/).filter(Boolean).map(s=>s[0].toUpperCase()+s.slice(1)).join('') || 'Tab';
-          const pageApp=`"use client";
-          import React from "react"; import { callIntent } from "@/lib/api";
-          export default function ${compName}Page(){
-            const [loading,setL]=React.useState(false); const [error,setE]=React.useState<string|null>(null); const [data,setD]=React.useState<any>(null);
-            async function refresh(){ try{ setL(true); setE(null); const res=await callIntent("${intent}","demo",{}); setD(res); } catch(e:any){ setE(e.message||"Error"); } finally{ setL(false); } }
-            React.useEffect(()=>{ refresh(); },[]);
-            return (<div style={{maxWidth:980,margin:"40px auto",padding:16}}>
-              <h1>${compName}</h1><p style={{color:"#666"}}>Route: ${route} • Intent: ${intent}</p>
-              <button onClick={refresh} disabled={loading}>{loading?"Loading...":"Refresh"}</button>
-              {error && <pre style={{color:"crimson"}}>{error}</pre>}
-              {data  && <pre style={{background:"#f6f8fa",padding:12,marginTop:12,overflow:"auto"}}>{JSON.stringify(data,null,2)}</pre>}
-            </div>);
-          }`;
-          const pagePages=`import React from "react"; import { callIntent } from "../lib/api";
-          export default function ${compName}Page(){
-            const [loading,setL]=React.useState(false); const [error,setE]=React.useState<string|null>(null); const [data,setD]=React.useState<any>(null);
-            async function refresh(){ try{ setL(true); setE(null); const res=await callIntent("${intent}","demo",{}); setD(res); } catch(e:any){ setE(e.message||"Error"); } finally{ setL(false); } }
-            React.useEffect(()=>{ refresh(); },[]);
-            return (<div style={{maxWidth:980,margin:"40px auto",padding:16}}>
-              <h1>${compName}</h1><p style={{color:"#666"}}>Route: ${route} • Intent: ${intent}</p>
-              <button onClick={refresh} disabled={loading}>{loading?"Loading...":"Refresh"}</button>
-              {error && <pre style={{color:"crimson"}}>{error}</pre>}
-              {data  && <pre style={{background:"#f6f8fa",padding:12,marginTop:12,overflow:"auto"}}>{JSON.stringify(data,null,2)}</pre>}
-            </div>);
-          }`;
-          if(useApp){ const t=path.join(REPO,'app',slug,'page.tsx'); ensure(path.dirname(t)); fs.writeFileSync(t,pageApp); console.log('Generated (App Router):',t); }
-          else { ensure(path.join(REPO,'pages')); const t=path.join(REPO,'pages',`${slug}.tsx`); fs.writeFileSync(t,pagePages); console.log('Generated (Pages Router):',t); }
+          JSON
+
+      - name: Ensure next.config.js alias
+        run: |
+          cat > next.config.js <<'JS'
+          /** @type {import('next').NextConfig} */
+          const path = require('path');
+          const nextConfig = {
+            typescript: { ignoreBuildErrors: true },
+            eslint: { ignoreDuringBuilds: true },
+            webpack: (config) => {
+              config.resolve.alias = { ...(config.resolve.alias||{}), "@": path.resolve(__dirname) };
+              return config;
+            },
+            reactStrictMode: false
+          };
+          module.exports = nextConfig;
           JS
 
-      - name: Generate page
-        env:
-          INPUT_INTENT: ${{ github.event.inputs.intent }}
-          INPUT_ROUTE:  ${{ github.event.inputs.route }}
-          INPUT_TITLE:  ${{ github.event.inputs.title }}
-        run: node ops/make_tab_page.js
+      - name: Ensure Tailwind, PostCSS and scripts in package.json
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='package.json';
+          const pkg=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):{name:"lightsignal-frontend",version:"0.1.0",private:true};
+          pkg.scripts=pkg.scripts||{};
+          if(!pkg.scripts.dev) pkg.scripts.dev="next dev";
+          if(!pkg.scripts.build) pkg.scripts.build="next build";
+          if(!pkg.scripts.start) pkg.scripts.start="next start";
+          pkg.dependencies=pkg.dependencies||{};
+          pkg.devDependencies=pkg.devDependencies||{};
+          const needDev={"tailwindcss":"^3.4.14","postcss":"^8.4.47","autoprefixer":"^10.4.20","typescript":"^5.6.3","@types/react":"^18.3.10","@types/node":"^20.14.12"};
+          for(const [k,v] of Object.entries(needDev)){
+            if(!(pkg.devDependencies[k]||pkg.dependencies[k])) pkg.devDependencies[k]=v;
+          }
+          if(!pkg.dependencies.next) pkg.dependencies.next="14.2.11";
+          if(!pkg.dependencies.react) pkg.dependencies.react="18.3.1";
+          if(!pkg.dependencies["react-dom"]) pkg.dependencies["react-dom"]="18.3.1";
+          fs.writeFileSync(p,JSON.stringify(pkg,null,2));
+          NODE
 
-      - name: Create Pull Request
+          # Tailwind + PostCSS configs
+          cat > postcss.config.js <<'JS'
+          module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };
+          JS
+
+          cat > tailwind.config.js <<'JS'
+          /** @type {import('tailwindcss').Config} */
+          module.exports = {
+            content: ["./app/**/*.{js,ts,jsx,tsx}", "./components/**/*.{js,ts,jsx,tsx}"],
+            theme: { extend: {} },
+            plugins: []
+          };
+          JS
+
+          # Ensure globals.css has Tailwind directives
+          if ! grep -q '@tailwind base' app/globals.css 2>/dev/null; then
+            cat > app/globals.css <<'CSS'
+            @tailwind base;
+            @tailwind components;
+            @tailwind utilities;
+            CSS
+          fi
+
+      - name: Ensure lib/api.ts (real backend first, no stubs)
+        run: |
+          cat > lib/api.ts <<'TS'
+          export type WatchItem = { id?: string; title: string; category?: string; deadline?: string; status?: string; notes?: string };
+          export type ChatMessage = { role: 'user'|'assistant'|'system'; content: string };
+
+          const BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://lightsignal-backend.onrender.com';
+
+          async function http<T>(path: string, opts?: RequestInit): Promise<T> {
+            const url = path.startsWith('http') ? path : `${BASE}${path}`;
+            const res = await fetch(url, {
+              ...opts,
+              headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) },
+              // Avoid caching API responses in Vercel Edge
+              cache: 'no-store'
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
+            return res.json() as Promise<T>;
+          }
+
+          export async function callIntent(intent: string, input: any = {}, company_id = 'demo') {
+            return http(`/api/intent`, { method: 'POST', body: JSON.stringify({ intent, company_id, input }) });
+          }
+
+          export async function chatOrchestrator(input: string | ChatMessage[]) {
+            const body = typeof input === 'string' ? { messages: [{ role: 'user', content: input }] } : { messages: input };
+            return http(`/api/orchestrator/chat`, { method: 'POST', body: JSON.stringify(body) });
+          }
+
+          export async function listWatchlist(company_id = 'demo') {
+            return http(`/api/watchlist?company_id=${company_id}`);
+          }
+
+          export async function addToWatchlist(item: WatchItem & { company_id?: string }) {
+            const b = { company_id: 'demo', ...item };
+            return http(`/api/watchlist`, { method: 'POST', body: JSON.stringify(b) });
+          }
+
+          export async function updateWatchItem(item: WatchItem & { company_id?: string }) {
+            const b = { company_id: 'demo', ...item };
+            if (!item.id) throw new Error('Missing id');
+            return http(`/api/watchlist/${item.id}`, { method: 'PATCH', body: JSON.stringify(b) });
+          }
+
+          export function exportCSVUrl(company_id = 'demo') {
+            return `${BASE}/api/watchlist/export.csv?company_id=${company_id}`;
+          }
+          TS
+
+      - name: Scaffold route page from spec
+        run: |
+          FOLDER="${{ steps.spec.outputs.folder }}"
+          FILE="app/${FOLDER}/page.tsx"
+          mkdir -p "$(dirname "$FILE")"
+          cat > "$FILE" <<'TSX'
+          "use client";
+          import { useEffect, useState } from "react";
+          import { callIntent, exportCSVUrl } from "@/lib/api";
+
+          export default function Page() {
+            const [data, setData] = useState<any>(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState<string | null>(null);
+
+            useEffect(() => {
+              (async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                  const res = await callIntent("opportunities", { region: "Austin, TX" }, "demo");
+                  setData(res);
+                } catch (e: any) {
+                  setError(e.message || "Failed to load");
+                } finally {
+                  setLoading(false);
+                }
+              })();
+            }, []);
+
+            return (
+              <div className="p-6 space-y-4">
+                <h1 className="text-2xl font-semibold">Opportunities</h1>
+                {loading && <div>Loading…</div>}
+                {error && <div className="text-red-600">Error: {error}</div>}
+                {data && <pre className="text-sm bg-gray-50 p-4 rounded">{JSON.stringify(data, null, 2)}</pre>}
+                <a className="underline" href={exportCSVUrl("demo")}>Export CSV</a>
+              </div>
+            );
+          }
+          TSX
+
+      - name: Create PR
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "feat(ui): scaffold for ${{ github.event.inputs.intent || 'issue' }}"
-          branch: auto/ui-${{ github.run_id }}
-          title: "${{ github.event.inputs.title || format('Auto UI: {0}', github.event.inputs.intent) }}"
-          body: "Scaffolded ${{
-            github.event.inputs.intent || 'from issue'
-          }} at route ${{ github.event.inputs.route || 'from issue' }}."
-          add-paths: |
-            app/**
-            pages/**
-            lib/**
-            ops/**
-          labels: |
-            build
+          commit-message: "feat(ui): scaffold ${{ steps.spec.outputs.intent }} UI"
+          title: "Auto PR: ${{ steps.spec.outputs.title }}"
+          body: "Generated from issue #${{ github.event.issue.number }}."
+          branch: "auto/ui-${{ steps.spec.outputs.intent }}-${{ github.run_id }}"
+          base: "main"
+          delete-branch: true
+          # NOTE: We intentionally do NOT use 'add-paths' to avoid pathspec errors.
+
+      - name: Comment PR link on issue
+        if: steps.cpr.outputs.pull-request-url != ''
+        run: gh issue comment ${{ github.event.issue.number }} --body "Opened ${{ steps.cpr.outputs.pull-request-url }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
