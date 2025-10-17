@@ -1,18 +1,28 @@
-// lib/api.ts — helpers the UI imports. Safe for SSR/CSR and Vercel builds.
+// lib/api.ts — UI helpers, safe for Vercel (SSR/CSR).
 
 export const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://lightsignal-backend.onrender.com";
 
-type JSONObject = Record<string, any>;
+// ---------- shared types ----------
+export type ChatMessage = {
+  // allow both 'ai' and 'assistant' since different components use both
+  role: "user" | "ai" | "assistant" | "system";
+  text?: string;      // some components use 'text'
+  content?: string;   // some components use 'content' — allow both
+  json?: any;
+};
 
-// ---------- HTTP helpers ----------
+type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
+interface JSONObject { [k: string]: JSONValue; }
+interface JSONArray extends Array<JSONValue> {}
+
+// ---------- low-level HTTP ----------
 async function getJSON<T = any>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`GET ${url} failed (${res.status})`);
   return (await res.json()) as T;
 }
-
 async function postJSON<T = any>(url: string, body: any): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -21,12 +31,11 @@ async function postJSON<T = any>(url: string, body: any): Promise<T> {
     cache: "no-store",
   });
   if (!res.ok) {
-    const text = await res.text();
+    const text = await res.text().catch(() => "");
     throw new Error(`POST ${url} failed (${res.status}): ${text}`);
   }
   return (await res.json()) as T;
 }
-
 async function patchJSON<T = any>(url: string, body: any): Promise<T> {
   const res = await fetch(url, {
     method: "PATCH",
@@ -35,7 +44,7 @@ async function patchJSON<T = any>(url: string, body: any): Promise<T> {
     cache: "no-store",
   });
   if (!res.ok) {
-    const text = await res.text();
+    const text = await res.text().catch(() => "");
     throw new Error(`PATCH ${url} failed (${res.status}): ${text}`);
   }
   return (await res.json()) as T;
@@ -99,22 +108,37 @@ export function callOrchestrator(
   return callIntent(intent, a as any, b as any);
 }
 
-export async function chatOrchestrator(message: string, companyId = "demo") {
-  return callIntent("business_insights", companyId, { query: message });
-}
-
+// ---------- Chat helpers ----------
 export async function callResearch(query: string, companyId = "demo") {
   return callIntent("business_insights", companyId, { query });
 }
 
-// ---------- Opportunities: watchlist + CSV (safe fallbacks) ----------
+// Accept BOTH string and ChatMessage[]
+export async function chatOrchestrator(
+  messages: string | ChatMessage[],
+  companyId: string = "demo"
+) {
+  if (typeof messages === "string") {
+    return callIntent("business_insights", companyId, { query: messages });
+  }
+  // Normalize ChatMessage[] -> transcript array {role, content}
+  const transcript = (messages || []).map((m) => ({
+    // map 'ai' to 'assistant' for consistency when sending to LLM-style APIs
+    role: m.role === "ai" ? "assistant" : m.role,
+    content: m.text ?? m.content ?? "",
+  }));
+  return callIntent("business_insights", companyId, { transcript });
+}
+
+// ---------- Opportunities helpers (watchlist + CSV) ----------
 export type WatchItem = {
   id?: string;
-  company_id?: string; // keep optional to avoid TS complaints
+  company_id?: string; // optional so UI calls don't type-error
   title?: string;
   category?: string;
   date?: string;
   deadline?: string;
+  status?: string;
   notes?: string;
   pinned?: boolean;
   meta?: Record<string, any>;
@@ -130,52 +154,70 @@ export function exportCSVUrl(
   )}&intent=${encodeURIComponent(intent)}`;
 }
 
-export async function listWatchlist(companyId: string = "demo") {
+export async function listWatchlist(companyId: string = "demo"): Promise<WatchItem[]> {
   try {
     return await getJSON<WatchItem[]>(
       `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`
     );
   } catch {
-    // backend route may not exist yet; return empty so UI still works
     return [] as WatchItem[];
+  }
+}
+
+// Accept BOTH:
+//   updateWatchItem("id", { status: "pinned" }, "demo")
+//   updateWatchItem({ id, status: "pinned", company_id: "demo" })
+export async function updateWatchItem(
+  a: string | (WatchItem & { id: string }),
+  b?: Partial<WatchItem>,
+  c?: string
+): Promise<WatchItem[]> {
+  if (typeof a === "string") {
+    const id = a;
+    const patch = b || {};
+    const companyId = typeof c === "string" ? c : "demo";
+    try {
+      return await patchJSON<WatchItem[]>(
+        `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
+          id
+        )}?company_id=${encodeURIComponent(companyId)}`,
+        patch
+      );
+    } catch {
+      return [] as WatchItem[];
+    }
+  } else {
+    const obj = a as WatchItem & { id: string };
+    const { id, company_id, ...patch } = obj;
+    const companyId = company_id || "demo";
+    try {
+      return await patchJSON<WatchItem[]>(
+        `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
+          id
+        )}?company_id=${encodeURIComponent(companyId)}`,
+        patch
+      );
+    } catch {
+      return [] as WatchItem[];
+    }
   }
 }
 
 export async function addToWatchlist(
   item: WatchItem,
   companyId: string = "demo"
-) {
+): Promise<WatchItem[]> {
   try {
     return await postJSON<WatchItem[]>(
-      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(
-        companyId
-      )}`,
+      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`,
       item
     );
   } catch {
-    // fallback: act as though it was added
     return [item] as WatchItem[];
   }
 }
 
-export async function updateWatchItem(
-  id: string,
-  patch: Partial<WatchItem>,
-  companyId: string = "demo"
-) {
-  try {
-    return await patchJSON<WatchItem[]>(
-      `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
-        id
-      )}?company_id=${encodeURIComponent(companyId)}`,
-      patch
-    );
-  } catch {
-    return [] as WatchItem[];
-  }
-}
-
-// ---------- Opportunity profiles (stubbed; safe) ----------
+// ---------- Opportunity profiles (flexible) ----------
 export type OpportunityProfile = {
   id: string;
   company?: string;
@@ -184,20 +226,37 @@ export type OpportunityProfile = {
   [k: string]: any;
 };
 
+// getOpportunityProfile("id","demo") OR getOpportunityProfile({id},"demo")
 export async function getOpportunityProfile(
-  id: string,
-  _companyId: string = "demo"
+  a: string | { id: string },
+  b?: string
 ): Promise<OpportunityProfile | null> {
-  // real route not defined yet; keep stub
-  return null;
+  const id = typeof a === "string" ? a : a?.id;
+  const _companyId = typeof b === "string" ? b : "demo";
+  // stubbed until backend route exists
+  return { id, summary: "stub", fields: {} };
 }
 
+// upsertOpportunityProfile("id", profile, "demo") OR upsertOpportunityProfile(profile, "demo")
 export async function upsertOpportunityProfile(
-  id: string,
-  profile: OpportunityProfile,
-  _companyId: string = "demo"
+  a: any,
+  b?: any,
+  c?: any
 ): Promise<OpportunityProfile> {
-  // stub returns the merged object
+  let id: string = "draft";
+  let profile: OpportunityProfile = { id: "draft" };
+  let _companyId = "demo";
+
+  if (typeof a === "string") {
+    id = a;
+    profile = (b || {}) as OpportunityProfile;
+    _companyId = typeof c === "string" ? c : "demo";
+  } else {
+    const p = (a || {}) as OpportunityProfile;
+    id = p.id || "draft";
+    profile = p;
+    _companyId = typeof b === "string" ? b : "demo";
+  }
   return { id, ...profile };
 }
 
@@ -209,20 +268,20 @@ export async function upsertOpportunityProfile(
  */
 export async function simulateOpportunity(a: any, b?: any, c?: any) {
   let scenario_name = "Quick Sim";
-  let levers: Array<{ lever: string; delta_pct?: number; delta_abs?: number }>;
   let companyId = "demo";
+  let levers: Array<{ lever: string; delta_pct?: number; delta_abs?: number }> = [];
 
   if (typeof a === "string" && Array.isArray(b)) {
-    // Style #1
+    // Style #1: (name, levers[], companyId?)
     scenario_name = a;
     levers = b;
     companyId = typeof c === "string" ? c : "demo";
   } else {
-    // Style #2
+    // Style #2: (itemObject, companyId?)
     const item = a || {};
     scenario_name = item.title || item.name || "Quick Sim";
     companyId = typeof b === "string" ? b : "demo";
-    levers = []; // quick simulate without explicit levers
+    // quick simulate: no explicit levers array
   }
 
   return callIntent("scenario_planning_lab", companyId, {

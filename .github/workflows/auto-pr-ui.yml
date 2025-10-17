@@ -6,151 +6,106 @@ permissions:
   issues: write
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      intent:
+        description: "Intent name, e.g. financial_overview"
+        required: true
+      route:
+        description: "Route path, e.g. /financial-overview"
+        required: true
+      title:
+        description: "PR title (optional)"
+        required: false
   issues:
-    types: [opened, edited, labeled]
-
-concurrency:
-  group: auto-pr-ui-${{ github.event.issue.number || 'manual' }}
-  cancel-in-progress: true
+    types: [labeled]
 
 jobs:
   open-pr:
-    # Run when the issue HAS the 'build' label (at creation, edit, or when label is added)
-    if: >
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && (
-        (github.event.action == 'labeled' && github.event.label.name == 'build') ||
-        (github.event.action != 'labeled' && contains(toJson(github.event.issue.labels), 'build')
-      )))
+    # Run when manually dispatched OR when an issue gets label 'build'
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'build') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with: { persist-credentials: true }
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with: { node-version: "20" }
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Ensure tsconfig path alias (@/*)
-        run: |
-          if [ -f tsconfig.json ]; then
-            node -e "const fs=require('fs');const p='tsconfig.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.compilerOptions=j.compilerOptions||{};j.compilerOptions.baseUrl=j.compilerOptions.baseUrl||'.';j.compilerOptions.paths=j.compilerOptions.paths||{};j.compilerOptions.paths['@/*']=j.compilerOptions.paths['@/*']||['*'];fs.writeFileSync(p,JSON.stringify(j,null,2));console.log('updated tsconfig paths')"
-          fi
-
-      - name: Add generator if missing
+      - name: Write generator script
         run: |
           mkdir -p ops
           cat > ops/make_tab_page.js <<'JS'
-// creates a Next.js page from the issue title/body; supports App Router or Pages Router
-const fs=require('fs');const path=require('path');const REPO=process.cwd();
-const ev=process.env.GITHUB_EVENT_PATH;const issue=ev?require(ev).issue||{}:{};
-const TITLE=issue.title||'Manual run';const BODY=issue.body||'';
-const toSlug=s=>s.toLowerCase().replace(/ui\s*\(mvp\)/g,'').replace(/build[:\s-]*/g,'').trim().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
-const mIntent=(BODY.match(/intent:\s*([a-z0-9_]+)/i)||[])[1];const mRoute=(BODY.match(/Route:\s*(\/[a-z0-9\-_/]+)/i)||BODY.match(/\/[a-z0-9\-_/]+/i)||[])[1];
-const slug=toSlug(TITLE);const intent=(mIntent||slug.replace(/-/g,'_'));const route=(mRoute||`/${slug}`);const pageSlug=route.replace(/^\//,'');
-const pascal=s=>s.split(/[^a-z0-9]+/i).filter(Boolean).map(w=>w[0].toUpperCase()+w.slice(1)).join('');const C=pascal(pageSlug);
-function ensure(p){if(!fs.existsSync(p))fs.mkdirSync(p,{recursive:true});}
-const apiPath=path.join(REPO,'lib','api.ts');ensure(path.dirname(apiPath));
-if(!fs.existsSync(apiPath)){
-  fs.writeFileSync(apiPath,`export const BACKEND_URL=process.env.NEXT_PUBLIC_BACKEND_URL||"https://lightsignal-backend.onrender.com";
-export async function callIntent(intent,companyId="demo",input={}){const r=await fetch(\`\${BACKEND_URL}/api/intent\`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({intent,company_id:companyId,input}),cache:"no-store"});if(!r.ok){throw new Error("intent failed")}return r.json();}
-export async function callOrchestrator(intent,companyId="demo",input={}){return callIntent(intent,companyId,input);}
-`);
-}
-const appDir=path.join(REPO,'app');const useApp=fs.existsSync(appDir);
-const pageApp=`"use client";
-import React from "react";import { callIntent } from "@/lib/api";
-export default function ${C}Page(){const[loading,setL]=React.useState(false);const[error,setE]=React.useState(null);const[data,setD]=React.useState(null);
-async function refresh(){try{setL(true);setE(null);const res=await callIntent("${intent}","demo",{});setD(res);}catch(e){setE(String(e))}finally{setL(false)}}
-React.useEffect(()=>{refresh();},[]);return(<div style={{maxWidth:980,margin:"40px auto",padding:16}}>
-<h1>${C}</h1><p style={{color:"#666"}}>Route: ${route} • Intent: ${intent}</p>
-<button onClick={refresh} disabled={loading}>{loading?"Loading...":"Refresh"}</button>
-{error&&<pre style={{color:"crimson"}}>{error}</pre>}
-{data&&<pre style={{background:"#f6f8fa",padding:12,marginTop:12,overflow:"auto"}}>{JSON.stringify(data,null,2)}</pre>}
-</div>);}
-`;
-const pagePages=`import React from "react";import { callIntent } from "../lib/api";
-export default function ${C}Page(){const[loading,setL]=React.useState(false);const[error,setE]=React.useState(null as null|string);const[data,setD]=React.useState<any>(null);
-async function refresh(){try{setL(true);setE(null);const res=await callIntent("${intent}","demo",{});setD(res);}catch(e:any){setE(e.message||"Error")}finally{setL(false)}}
-React.useEffect(()=>{refresh();},[]);return(<div style={{maxWidth:980,margin:"40px auto",padding:16}}>
-<h1>${C}</h1><p style={{color:"#666"}}>Route: ${route} • Intent: ${intent}</p>
-<button onClick={refresh} disabled={loading}>{loading?"Loading...":"Refresh"}</button>
-{error&&<pre style={{color:"crimson"}}>{error}</pre>}
-{data&&<pre style={{background:"#f6f8fa",padding:12,marginTop:12,overflow:"auto"}}>{JSON.stringify(data,null,2)}</pre>}
-</div>);}
-`;
-if(useApp){const t=path.join(REPO,'app',pageSlug,'page.tsx');ensure(path.dirname(t));fs.writeFileSync(t,pageApp);console.log('Generated (App Router):',t);}
-else{ensure(path.join(REPO,'pages'));const t=path.join(REPO,'pages',`${pageSlug}.tsx`);fs.writeFileSync(t,pagePages);console.log('Generated (Pages Router):',t);}
-JS
+          const fs=require('fs');const path=require('path');const REPO=process.cwd();
+          const evPath=process.env.GITHUB_EVENT_PATH; const ev=evPath?require(evPath):{};
+          const fromIssue = ev.issue || {};
+          const body = (fromIssue.body||'');
+          const title = process.env.INPUT_TITLE || fromIssue.title || 'Auto UI Page';
+          // Prefer workflow_dispatch inputs, else parse issue body
+          const intent = (process.env.INPUT_INTENT || (body.match(/intent:\s*([a-z0-9_]+)/i)||[])[1] || '').trim();
+          const route  = (process.env.INPUT_ROUTE  || (body.match(/Route:\s*(\/[A-Za-z0-9\-_\/]+)/i)||[])[1] || '').trim() || `/${intent||'new-tab'}`;
+          if(!intent){ console.error('No intent found. Provide via workflow inputs or issue body.'); process.exit(1); }
+          const slug = route.replace(/^\//,'');
+          function ensure(p){ if(!fs.existsSync(p)) fs.mkdirSync(p,{recursive:true}); }
+          const apiPath=path.join(REPO,'lib','api.ts'); ensure(path.dirname(apiPath));
+          if(!fs.existsSync(apiPath)){
+            fs.writeFileSync(apiPath,`export const BACKEND_URL=process.env.NEXT_PUBLIC_BACKEND_URL||"https://lightsignal-backend.onrender.com";
+            export async function callIntent(intent,companyId="demo",input={}){const r=await fetch(\`\${BACKEND_URL}/api/intent\`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({intent,company_id:companyId,input}),cache:"no-store"});if(!r.ok){throw new Error("intent failed")}return r.json();}
+            `);
+          }
+          const appDir=path.join(REPO,'app'); const useApp=fs.existsSync(appDir);
+          const compName = slug.split(/[^\w]+/).filter(Boolean).map(s=>s[0].toUpperCase()+s.slice(1)).join('') || 'Tab';
+          const pageApp=`"use client";
+          import React from "react"; import { callIntent } from "@/lib/api";
+          export default function ${compName}Page(){
+            const [loading,setL]=React.useState(false); const [error,setE]=React.useState<string|null>(null); const [data,setD]=React.useState<any>(null);
+            async function refresh(){ try{ setL(true); setE(null); const res=await callIntent("${intent}","demo",{}); setD(res); } catch(e:any){ setE(e.message||"Error"); } finally{ setL(false); } }
+            React.useEffect(()=>{ refresh(); },[]);
+            return (<div style={{maxWidth:980,margin:"40px auto",padding:16}}>
+              <h1>${compName}</h1><p style={{color:"#666"}}>Route: ${route} • Intent: ${intent}</p>
+              <button onClick={refresh} disabled={loading}>{loading?"Loading...":"Refresh"}</button>
+              {error && <pre style={{color:"crimson"}}>{error}</pre>}
+              {data  && <pre style={{background:"#f6f8fa",padding:12,marginTop:12,overflow:"auto"}}>{JSON.stringify(data,null,2)}</pre>}
+            </div>);
+          }`;
+          const pagePages=`import React from "react"; import { callIntent } from "../lib/api";
+          export default function ${compName}Page(){
+            const [loading,setL]=React.useState(false); const [error,setE]=React.useState<string|null>(null); const [data,setD]=React.useState<any>(null);
+            async function refresh(){ try{ setL(true); setE(null); const res=await callIntent("${intent}","demo",{}); setD(res); } catch(e:any){ setE(e.message||"Error"); } finally{ setL(false); } }
+            React.useEffect(()=>{ refresh(); },[]);
+            return (<div style={{maxWidth:980,margin:"40px auto",padding:16}}>
+              <h1>${compName}</h1><p style={{color:"#666"}}>Route: ${route} • Intent: ${intent}</p>
+              <button onClick={refresh} disabled={loading}>{loading?"Loading...":"Refresh"}</button>
+              {error && <pre style={{color:"crimson"}}>{error}</pre>}
+              {data  && <pre style={{background:"#f6f8fa",padding:12,marginTop:12,overflow:"auto"}}>{JSON.stringify(data,null,2)}</pre>}
+            </div>);
+          }`;
+          if(useApp){ const t=path.join(REPO,'app',slug,'page.tsx'); ensure(path.dirname(t)); fs.writeFileSync(t,pageApp); console.log('Generated (App Router):',t); }
+          else { ensure(path.join(REPO,'pages')); const t=path.join(REPO,'pages',`${slug}.tsx`); fs.writeFileSync(t,pagePages); console.log('Generated (Pages Router):',t); }
+          JS
 
-      - name: Generate page from issue
+      - name: Generate page
+        env:
+          INPUT_INTENT: ${{ github.event.inputs.intent }}
+          INPUT_ROUTE:  ${{ github.event.inputs.route }}
+          INPUT_TITLE:  ${{ github.event.inputs.title }}
         run: node ops/make_tab_page.js
-
-      - name: Build once (capture logs; do not fail job)
-        id: build1
-        continue-on-error: true
-        run: |
-          npm ci || npm i
-          set +e
-          npm run build 2>&1 | tee build.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-          set -e
-
-      - name: Auto-fix lib/api missing exports
-        if: steps.build1.outputs.exit_code != '0'
-        run: |
-          node -e '
-            const fs=require("fs");
-            const log=fs.readFileSync("build.log","utf8");
-            const missing=[...log.matchAll(/is not exported from .+lib\/api.+\(imported as .?([A-Za-z0-9_]+).?\)/g)].map(m=>m[1]);
-            if(!missing.length){console.log("no missing api exports detected");process.exit(0);}
-            const p="lib/api.ts";let src=fs.existsSync(p)?fs.readFileSync(p,"utf8"):"";
-            const header=`\n// ---- auto-added stubs by Auto PR UI ----\n`;
-            let appended=false;
-            const add=(name,body)=>{ if(!new RegExp(`export\\s+(async\\s+)?function\\s+${name}\\b`).test(src) && !new RegExp(`export\\s+const\\s+${name}\\b`).test(src)){ src += (appended? "" : header) + body; appended=true; console.log("added stub:",name);} };
-            missing.forEach(name=>{
-              // default async stub that returns harmless data
-              add(name, `\nexport async function ${name}(...args:any[]): Promise<any> { return {}; }\n`);
-            });
-            fs.writeFileSync(p,src);
-          '
-
-      - name: Build again after auto-fix
-        if: steps.build1.outputs.exit_code != '0'
-        id: build2
-        continue-on-error: true
-        run: |
-          set +e
-          npm run build 2>&1 | tee build2.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-          set -e
-
-      - name: Prepare PR body
-        run: |
-          echo "Auto-generated from issue #${{ github.event.issue.number || 'manual' }}." > .autopr_body.txt
-          echo "" >> .autopr_body.txt
-          if [ -f build.log ]; then
-            echo "### First build log (tail)" >> .autopr_body.txt
-            tail -n 80 build.log >> .autopr_body.txt
-            echo "" >> .autopr_body.txt
-          fi
-          if [ -f build2.log ]; then
-            echo "### Second build log (tail)" >> .autopr_body.txt
-            tail -n 80 build2.log >> .autopr_body.txt
-            echo "" >> .autopr_body.txt
-          fi
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "feat(ui): page from issue #${{ github.event.issue.number || 'manual' }}"
-          branch: auto/ui-${{ github.event.issue.number || 'manual' }}
-          title: "Auto PR (UI): ${{ github.event.issue.title || 'Manual run' }}"
-          body-path: .autopr_body.txt
+          commit-message: "feat(ui): scaffold for ${{ github.event.inputs.intent || 'issue' }}"
+          branch: auto/ui-${{ github.run_id }}
+          title: "${{ github.event.inputs.title || format('Auto UI: {0}', github.event.inputs.intent) }}"
+          body: "Scaffolded ${{
+            github.event.inputs.intent || 'from issue'
+          }} at route ${{ github.event.inputs.route || 'from issue' }}."
           add-paths: |
             app/**
             pages/**
             lib/**
-            ops/make_tab_page.js
+            ops/**
           labels: |
             build
