@@ -6,7 +6,8 @@ export const BACKEND_URL =
 
 // ---------- shared types ----------
 export type ChatMessage = {
-  role: "user" | "ai" | "system";
+  // allow both 'ai' and 'assistant' since different components use both
+  role: "user" | "ai" | "assistant" | "system";
   text?: string;      // some components use 'text'
   content?: string;   // some components use 'content' — allow both
   json?: any;
@@ -112,7 +113,7 @@ export async function callResearch(query: string, companyId = "demo") {
   return callIntent("business_insights", companyId, { query });
 }
 
-// Overload so pages can pass either a string or a ChatMessage[]
+// Accept BOTH string and ChatMessage[]
 export async function chatOrchestrator(
   messages: string | ChatMessage[],
   companyId: string = "demo"
@@ -122,7 +123,8 @@ export async function chatOrchestrator(
   }
   // Normalize ChatMessage[] -> transcript array {role, content}
   const transcript = (messages || []).map((m) => ({
-    role: m.role,
+    // map 'ai' to 'assistant' for consistency when sending to LLM-style APIs
+    role: m.role === "ai" ? "assistant" : m.role,
     content: m.text ?? m.content ?? "",
   }));
   return callIntent("business_insights", companyId, { transcript });
