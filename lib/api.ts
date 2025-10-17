@@ -109,11 +109,12 @@ export async function callResearch(query: string, companyId = "demo") {
 // ---------- Opportunities helpers (watchlist + CSV) ----------
 export type WatchItem = {
   id?: string;
-  company_id?: string; // keep optional to avoid TS complaints in UI
+  company_id?: string; // keep optional so UI code can pass it inline
   title?: string;
   category?: string;
   date?: string;
   deadline?: string;
+  status?: string;
   notes?: string;
   pinned?: boolean;
   meta?: Record<string, any>;
@@ -129,34 +130,63 @@ export function exportCSVUrl(
   )}&intent=${encodeURIComponent(intent)}`;
 }
 
-// Prefer backend routes if present; fall back to safe no-ops so builds never break.
 export async function listWatchlist(companyId: string = "demo"): Promise<WatchItem[]> {
   try {
     return await getJSON<WatchItem[]>(
       `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`
     );
   } catch {
+    // backend route may not exist yet; return empty so UI still works
     return [] as WatchItem[];
   }
 }
+
 export async function addToWatchlist(
   item: WatchItem,
   companyId: string = "demo"
 ): Promise<WatchItem[]> {
   try {
+    const cid = item.company_id || companyId;
+    const body = { ...item };
+    delete (body as any).company_id;
     return await postJSON<WatchItem[]>(
-      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`,
-      item
+      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(cid)}`,
+      body
     );
   } catch {
     return [item] as WatchItem[];
   }
 }
-export async function updateWatchItem(
-  id: string,
-  patch: Partial<WatchItem>,
-  companyId: string = "demo"
-): Promise<WatchItem[]> {
+
+// Accept BOTH styles:
+//   updateWatchItem("id123", { status: "pinned" }, "demo")
+//   updateWatchItem({ company_id: "demo", id: "id123", status: "pinned" })
+export async function updateWatchItem(a: any, b?: any, c?: any): Promise<WatchItem[]> {
+  let id = "";
+  let patch: Partial<WatchItem> = {};
+  let companyId = "demo";
+
+  if (typeof a === "string") {
+    // ("id", patch, companyId?)
+    id = a;
+    patch = (b || {}) as Partial<WatchItem>;
+    companyId = typeof c === "string" ? c : "demo";
+  } else if (a && typeof a === "object") {
+    // ({ company_id, id, ...patch })
+    id = a.id || "";
+    companyId = a.company_id || "demo";
+    patch = { ...a };
+    delete (patch as any).id;
+    delete (patch as any).company_id;
+  } else {
+    throw new Error("updateWatchItem: invalid arguments");
+  }
+
+  if (!id) {
+    // keep build from failing; act as a no-op
+    return [];
+  }
+
   try {
     return await patchJSON<WatchItem[]>(
       `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
@@ -169,7 +199,7 @@ export async function updateWatchItem(
   }
 }
 
-// ---------- Opportunity profiles (make calls flexible) ----------
+// ---------- Opportunity profiles (flexible) ----------
 export type OpportunityProfile = {
   id: string;
   company?: string;
@@ -185,11 +215,13 @@ export async function getOpportunityProfile(
 ): Promise<OpportunityProfile | null> {
   const id = typeof a === "string" ? a : a?.id;
   const _companyId = typeof b === "string" ? b : "demo";
-  // no server route yet; keep stub so UI compiles
+  // no server route yet; return a stub so UI compiles
   return { id, summary: "stub", fields: {} };
 }
 
-// Accepts BOTH: upsertOpportunityProfile("id", profile, "demo") AND upsertOpportunityProfile(profile, "demo")
+// Accept BOTH:
+//   upsertOpportunityProfile("id", profile, "demo")
+//   upsertOpportunityProfile(profile, "demo")
 export async function upsertOpportunityProfile(
   a: any,
   b?: any,
@@ -200,18 +232,15 @@ export async function upsertOpportunityProfile(
   let _companyId = "demo";
 
   if (typeof a === "string") {
-    // style: (id, profile, companyId?)
     id = a;
     profile = (b || {}) as OpportunityProfile;
     _companyId = typeof c === "string" ? c : "demo";
   } else {
-    // style: (profileObj, companyId?)
     const p = (a || {}) as OpportunityProfile;
     id = p.id || "draft";
     profile = p;
     _companyId = typeof b === "string" ? b : "demo";
   }
-  // Stub returns merged object
   return { id, ...profile };
 }
 
