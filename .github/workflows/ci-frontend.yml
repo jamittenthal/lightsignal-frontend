@@ -2,24 +2,34 @@ name: CI Frontend
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - 'app/**'
+      - 'lib/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - '.github/workflows/ci-frontend.yml'
+  push:
+    branches: [ ci-seed-1 ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      NEXT_PUBLIC_BACKEND_URL: https://lightsignal-backend.onrender.com
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'   # no caching
+          node-version: '20'
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -27,5 +37,7 @@ jobs:
             npm install
           fi
 
-      - name: Build
+      - name: Typecheck & build
+        env:
+          NEXT_PUBLIC_BACKEND_URL: https://lightsignal-backend.onrender.com
         run: npm run build
