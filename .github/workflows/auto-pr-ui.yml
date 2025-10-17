@@ -21,25 +21,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Safely capture issue title/body (no shell parsing problems)
-      - name: Capture issue meta
+      # Capture title/body safely, and parse intent/route from the title.
+      - name: Capture & parse issue meta
         id: meta
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Save raw text exactly as-is
+          set -eu
           printf '%s' "$ISSUE_TITLE" > issue_title.txt
           printf '%s' "$ISSUE_BODY"  > issue_body.txt
 
-          # Parse: "Build: <intent> | <route> | <ui title>"
-          INTENT=$(sed -n 's/^Build:[[:space:]]*\([^|]*\).*/\1/p' issue_title.txt | sed 's/[[:space:]]*$//')
-          ROUTE=$(awk -F'\\|' '{gsub(/^ +| +$/,"",$2); print $2}' issue_title.txt)
-          UITITLE=$(awk -F'\\|' '{gsub(/^ +| +$/,"",$3); print $3}' issue_title.txt)
+          # Expect: "Build: <intent> | <route> | <ui title>"
+          STRIPPED="$(sed -n 's/^Build:[[:space:]]*//p' issue_title.txt)"
 
-          echo "intent=$INTENT"   >> $GITHUB_OUTPUT
-          echo "route=$ROUTE"     >> $GITHUB_OUTPUT
-          echo "uititle=$UITITLE" >> $GITHUB_OUTPUT
+          INTENT="$(printf '%s' "$STRIPPED" | cut -d '|' -f1 | xargs)"
+          ROUTE="$(printf  '%s' "$STRIPPED" | cut -d '|' -f2 | xargs)"
+          UITITLE="$(printf '%s' "$STRIPPED" | cut -d '|' -f3- | xargs)"
+
+          echo "intent=$INTENT"   >> "$GITHUB_OUTPUT"
+          echo "route=$ROUTE"     >> "$GITHUB_OUTPUT"
+          echo "uititle=$UITITLE" >> "$GITHUB_OUTPUT"
 
       - name: Guard parsed fields
         run: |
@@ -50,30 +52,31 @@ jobs:
           test -n "${{ steps.meta.outputs.route }}"  || (echo "Missing route in title"; exit 1)
 
       - name: Scaffold UI (page + plan)
+        env:
+          ROUTE: ${{ steps.meta.outputs.route }}
         run: |
-          mkdir -p ops
-          # Store the issue body verbatim (no special chars problems)
-          cat > ops/ui-plan-${{ steps.meta.outputs.route || 'unknown' }}.md <<'MD'
-          ${{ github.event.issue.body }}
-          MD
+          set -eu
+          mkdir -p "ops"
+          # Save the issue body verbatim as a plan file (no heredocs)
+          cp issue_body.txt "ops/ui-plan-${ROUTE:-unknown}.md"
 
-          # Make the page if it doesn't exist
-          PAGE_DIR="app/${{ steps.meta.outputs.route }}"
+          # Make the page if it doesn't exist (write with printf, no heredocs)
+          PAGE_DIR="app/${ROUTE}"
           mkdir -p "$PAGE_DIR"
           if [ ! -f "$PAGE_DIR/page.tsx" ]; then
-            cat > "$PAGE_DIR/page.tsx" <<'TSX'
-            "use client";
-            import React from "react";
-
-            export default function Page() {
-              return (
-                <div className="p-6 space-y-3">
-                  <h1 className="text-2xl font-bold">Coming soon</h1>
-                  <p>This tab will render data from the backend for this route.</p>
-                </div>
-              );
-            }
-            TSX
+            {
+              printf '%s\n' '"use client";'
+              printf '%s\n' 'import React from "react";'
+              printf '%s\n' ''
+              printf '%s\n' 'export default function Page() {'
+              printf '%s\n' '  return ('
+              printf '%s\n' '    <div className="p-6 space-y-3">'
+              printf '%s\n' '      <h1 className="text-2xl font-bold">Coming soon</h1>'
+              printf '%s\n' '      <p>This tab will render data from the backend for this route.</p>'
+              printf '%s\n' '    </div>'
+              printf '%s\n' '  );'
+              printf '%s\n' '}'
+            } > "$PAGE_DIR/page.tsx"
           fi
 
       - name: Create PR
