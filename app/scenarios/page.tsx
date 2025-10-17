@@ -1,73 +1,85 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import {
-  chatOrchestrator,
-  type ChatMessage,
-} from "../../lib/api";
+import React, { useEffect, useRef, useState } from "react";
+import { chatOrchestrator, type ChatMessage } from "../../lib/api";
 
-type KPIMap = Record<string, number>;
-type Visual = { type: "bar" | "line"; title: string; labels: string[]; values: number[] };
+// --- Small UI bits kept local so the file is self-contained ---
 
-function Bubble({ role, content }: { role: "assistant" | "user" | "system"; content: string }) {
-  if (role === "system") {
-    // Hide or render subtly; we'll hide to keep UI simple
-    return null;
-  }
+function Bubble(props: { role: "user" | "assistant" | "system"; content: string }) {
+  const { role, content } = props;
   const mine = role === "user";
+  const sys = role === "system";
+  const base =
+    "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm leading-6 shadow";
+  const color = sys
+    ? "bg-gray-200 text-gray-800"
+    : mine
+    ? "bg-blue-600 text-white"
+    : "bg-gray-100 text-gray-900";
+  const align = mine ? "self-end text-right" : "self-start";
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
-          mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"
-        }`}
-      >
-        {content}
-      </div>
+    <div className={`flex ${align}`}>
+      <div className={`${base} ${color}`}>{content || ""}</div>
     </div>
   );
 }
 
 function Typing() {
   return (
-    <div className="text-xs text-slate-500 italic">assistant is typing…</div>
-  );
-}
-
-function SectionCard({ title, children }: { title: string; children: any }) {
-  return (
-    <div className="rounded-xl border p-4">
-      <div className="font-medium mb-2">{title}</div>
-      {children}
+    <div className="self-start">
+      <div className="bg-gray-100 text-gray-700 rounded-2xl px-4 py-2 text-sm shadow">
+        <span className="inline-block animate-pulse">…</span>
+      </div>
     </div>
   );
 }
 
+// --- Page ---
+
 export default function ScenariosPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "assistant", content: "Hi! Describe a scenario to test (e.g., “Increase price by 5%”)." },
+  ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [parsed, setParsed] = useState<any | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [parsed, setParsed] = useState<any>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function send() {
+  async function onSend() {
     const q = input.trim();
     if (!q) return;
     setInput("");
 
+    // Append user's message locally
     const nextMsgs: ChatMessage[] = [...messages, { role: "user", content: q }];
     setMessages(nextMsgs);
     setLoading(true);
+
     try {
-      // Our helper accepts string | ChatMessage[]
-      const res = await chatOrchestrator(nextMsgs);
-      // Append assistant reply bubble
-      setMessages((prev) => [...prev, res.message]);
-      if (res.parsed) setParsed(res.parsed);
+      // Our lib supports string | ChatMessage[]
+      const res = await chatOrchestrator(nextMsgs, "demo");
+
+      // Try to extract a reply content from various shapes
+      let replyText =
+        res?.message?.content ??
+        res?.message?.text ??
+        res?.result?.text ??
+        (typeof res?.result === "string" ? res.result : undefined) ??
+        res?.text ??
+        (res?.parsed ? JSON.stringify(res.parsed, null, 2) : "Ok.");
+
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content: typeof replyText === "string" ? replyText : "Ok.",
+        json: res?.parsed ?? undefined,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+      if (res?.parsed) setParsed(res.parsed);
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
@@ -78,102 +90,63 @@ export default function ScenariosPage() {
     }
   }
 
-  function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") send();
+  // Let Enter submit (Shift+Enter for newline)
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      onSend();
+    }
   }
 
-  // Extract a few convenience bits from parsed JSON if present
-  const k: KPIMap =
-    parsed?.kpis ??
-    parsed?.base?.kpis ??
-    {};
-  const visuals: Visual[] = Array.isArray(parsed?.visuals) ? parsed.visuals : [];
-
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Scenario Lab</h1>
-      </div>
+    <div className="max-w-4xl mx-auto p-4 space-y-4">
+      <h1 className="text-2xl font-semibold">Scenario Planning Lab (Chat)</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Chat side */}
-        <div>
-          <SectionCard title="Chat">
-            <div className="h-[46vh] overflow-y-auto space-y-3 pr-1 border rounded-xl p-3 mb-3">
-              {messages.map((m, i) => (
-                <Bubble key={i} role={m.role} content={m.content} />
-              ))}
-              {loading && <Typing />}
-              <div ref={endRef} />
-            </div>
-            <div className="flex gap-2">
-              <input
-                className="flex-1 border rounded px-3 py-2 text-sm"
-                placeholder='Ask a scenario question (e.g., "Can we afford 2 new vans?")'
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKey}
+      <div className="grid md:grid-cols-3 gap-4">
+        {/* Chat column */}
+        <div className="md:col-span-2 flex flex-col">
+          <div className="h-[50vh] overflow-y-auto space-y-3 pr-1 border rounded-xl p-3 mb-3 bg-white">
+            {messages.map((m, i) => (
+              <Bubble
+                key={i}
+                // Map 'ai' -> 'assistant' so the component always sees the right union
+                role={(m.role === "ai" ? "assistant" : m.role) as "user" | "assistant" | "system"}
+                content={m.content ?? m.text ?? ""}
               />
-              <button
-                onClick={send}
-                disabled={loading}
-                className="rounded bg-black text-white px-4 py-2"
-              >
-                {loading ? "…" : "Send"}
-              </button>
-            </div>
-          </SectionCard>
+            ))}
+            {loading && <Typing />}
+            <div ref={endRef} />
+          </div>
+
+          <div className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="e.g., 'Increase price by 5% and reduce marketing by 10%'"
+              className="flex-1 border rounded-xl p-3 text-sm min-h-[56px]"
+            />
+            <button
+              onClick={onSend}
+              disabled={loading}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 disabled:opacity-50"
+            >
+              Send
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Tip: Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for a new line.
+          </p>
         </div>
 
-        {/* Parsed output side */}
-        <div className="space-y-6">
-          <SectionCard title="KPIs">
-            {Object.keys(k).length === 0 ? (
-              <div className="text-sm text-slate-500">No KPIs yet.</div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {Object.entries(k).map(([key, val]) => (
-                  <div key={key} className="rounded-lg border p-3">
-                    <div className="text-xs uppercase tracking-wide text-slate-500">{key}</div>
-                    <div className="text-lg font-semibold">{val}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Visuals">
-            {visuals.length === 0 ? (
-              <div className="text-sm text-slate-500">No visuals yet.</div>
-            ) : (
-              <div className="space-y-3">
-                {visuals.map((v, i) => (
-                  <div key={i} className="rounded border p-3">
-                    <div className="font-medium">{v.title}</div>
-                    <div className="text-xs text-slate-500 mb-2">({v.type})</div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <tbody>
-                          {v.labels.map((label, idx) => (
-                            <tr key={idx} className="border-b">
-                              <td className="py-1 pr-4 text-slate-600">{label}</td>
-                              <td className="py-1">{v.values[idx]}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Raw JSON (debug)">
-            <pre className="text-xs bg-slate-50 p-3 rounded overflow-auto">
+        {/* Parsed JSON / Debug column */}
+        <div className="md:col-span-1">
+          <div className="border rounded-xl p-3 bg-white">
+            <div className="text-sm font-medium mb-2">Parsed / JSON</div>
+            <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
               {parsed ? JSON.stringify(parsed, null, 2) : "—"}
             </pre>
-          </SectionCard>
+          </div>
         </div>
       </div>
     </div>
