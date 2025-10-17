@@ -7,7 +7,8 @@ export const BACKEND_URL =
 // ---------- shared types ----------
 export type ChatMessage = {
   role: "user" | "ai" | "system";
-  text?: string;
+  text?: string;      // some components use 'text'
+  content?: string;   // some components use 'content' — allow both
   json?: any;
 };
 
