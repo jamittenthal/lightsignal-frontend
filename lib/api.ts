@@ -1,8 +1,15 @@
-// lib/api.ts — helpers the UI imports. Safe for Vercel builds (SSR/CSR).
+// lib/api.ts — UI helpers, safe for Vercel (SSR/CSR).
 
 export const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://lightsignal-backend.onrender.com";
+
+// ---------- shared types ----------
+export type ChatMessage = {
+  role: "user" | "ai" | "system";
+  text?: string;
+  json?: any;
+};
 
 type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
 interface JSONObject { [k: string]: JSONValue; }
@@ -109,7 +116,7 @@ export async function callResearch(query: string, companyId = "demo") {
 // ---------- Opportunities helpers (watchlist + CSV) ----------
 export type WatchItem = {
   id?: string;
-  company_id?: string; // keep optional so UI code can pass it inline
+  company_id?: string; // optional so UI calls don't type-error
   title?: string;
   category?: string;
   date?: string;
@@ -136,8 +143,46 @@ export async function listWatchlist(companyId: string = "demo"): Promise<WatchIt
       `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`
     );
   } catch {
-    // backend route may not exist yet; return empty so UI still works
     return [] as WatchItem[];
+  }
+}
+
+// Accept BOTH:
+//   updateWatchItem("id", { status: "pinned" }, "demo")
+//   updateWatchItem({ id, status: "pinned", company_id: "demo" })
+export async function updateWatchItem(
+  a: string | (WatchItem & { id: string }),
+  b?: Partial<WatchItem>,
+  c?: string
+): Promise<WatchItem[]> {
+  if (typeof a === "string") {
+    const id = a;
+    const patch = b || {};
+    const companyId = typeof c === "string" ? c : "demo";
+    try {
+      return await patchJSON<WatchItem[]>(
+        `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
+          id
+        )}?company_id=${encodeURIComponent(companyId)}`,
+        patch
+      );
+    } catch {
+      return [] as WatchItem[];
+    }
+  } else {
+    const obj = a as WatchItem & { id: string };
+    const { id, company_id, ...patch } = obj;
+    const companyId = company_id || "demo";
+    try {
+      return await patchJSON<WatchItem[]>(
+        `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
+          id
+        )}?company_id=${encodeURIComponent(companyId)}`,
+        patch
+      );
+    } catch {
+      return [] as WatchItem[];
+    }
   }
 }
 
@@ -146,56 +191,12 @@ export async function addToWatchlist(
   companyId: string = "demo"
 ): Promise<WatchItem[]> {
   try {
-    const cid = item.company_id || companyId;
-    const body = { ...item };
-    delete (body as any).company_id;
     return await postJSON<WatchItem[]>(
-      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(cid)}`,
-      body
+      `${BACKEND_URL}/api/watchlist?company_id=${encodeURIComponent(companyId)}`,
+      item
     );
   } catch {
     return [item] as WatchItem[];
-  }
-}
-
-// Accept BOTH styles:
-//   updateWatchItem("id123", { status: "pinned" }, "demo")
-//   updateWatchItem({ company_id: "demo", id: "id123", status: "pinned" })
-export async function updateWatchItem(a: any, b?: any, c?: any): Promise<WatchItem[]> {
-  let id = "";
-  let patch: Partial<WatchItem> = {};
-  let companyId = "demo";
-
-  if (typeof a === "string") {
-    // ("id", patch, companyId?)
-    id = a;
-    patch = (b || {}) as Partial<WatchItem>;
-    companyId = typeof c === "string" ? c : "demo";
-  } else if (a && typeof a === "object") {
-    // ({ company_id, id, ...patch })
-    id = a.id || "";
-    companyId = a.company_id || "demo";
-    patch = { ...a };
-    delete (patch as any).id;
-    delete (patch as any).company_id;
-  } else {
-    throw new Error("updateWatchItem: invalid arguments");
-  }
-
-  if (!id) {
-    // keep build from failing; act as a no-op
-    return [];
-  }
-
-  try {
-    return await patchJSON<WatchItem[]>(
-      `${BACKEND_URL}/api/watchlist/${encodeURIComponent(
-        id
-      )}?company_id=${encodeURIComponent(companyId)}`,
-      patch
-    );
-  } catch {
-    return [] as WatchItem[];
   }
 }
 
@@ -208,20 +209,18 @@ export type OpportunityProfile = {
   [k: string]: any;
 };
 
-// Accepts: getOpportunityProfile("id", "demo") OR getOpportunityProfile({id:"id"}, "demo")
+// getOpportunityProfile("id","demo") OR getOpportunityProfile({id},"demo")
 export async function getOpportunityProfile(
   a: string | { id: string },
   b?: string
 ): Promise<OpportunityProfile | null> {
   const id = typeof a === "string" ? a : a?.id;
   const _companyId = typeof b === "string" ? b : "demo";
-  // no server route yet; return a stub so UI compiles
+  // stubbed until backend route exists
   return { id, summary: "stub", fields: {} };
 }
 
-// Accept BOTH:
-//   upsertOpportunityProfile("id", profile, "demo")
-//   upsertOpportunityProfile(profile, "demo")
+// upsertOpportunityProfile("id", profile, "demo") OR upsertOpportunityProfile(profile, "demo")
 export async function upsertOpportunityProfile(
   a: any,
   b?: any,
