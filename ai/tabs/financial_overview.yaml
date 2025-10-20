@@ -1,0 +1,54 @@
+---
+intent: financial_overview
+version: 1
+route: /overview
+summary: >
+  Returns KPIs and analytics for the Financial Overview tab: revenue/gross/net, expenses,
+  liquidity/solvency, efficiency, cash flow/runway, variance, and risks.
+inputs:
+  company_id: { type: string, required: true }
+  action:
+    type: string
+    enum: [load]
+    required: true
+outputs:
+  kpis:
+    revenue_mtd: number
+    revenue_qtd: number
+    revenue_ytd: number
+    gross_margin_pct: number
+    opex_ratio_pct: number
+    net_margin_pct: number
+    cash_flow_mtd: number
+    runway_months: number
+    ai_confidence_pct: number
+    industry_notes: string[]
+  insights: string[]
+  liquidity:
+    current_ratio: number
+    quick_ratio: number
+    dte: number
+    interest_cover: number
+  efficiency:
+    dso_days: number
+    dpo_days: number
+    inv_turns: number
+    ccc_days: number
+  cashflow:
+    burn_rate_monthly: number
+    runway_months: number
+    forecast:
+      - { month: string, base: number, best: number, worst: number }
+  variance:
+    - { metric: string, actual: number, forecast: number, variance_pct: number }
+  risks:
+    - { title: string, note: string, mitigation: string, confidence_pct: number, percentile: number }
+notes:
+  thresholds:
+    gross_margin: { good: 0.40, moderate_low: 0.25 }
+    expense_ratio: { good_max: 0.30, caution_max: 0.45 }
+    current_ratio: { good_min: 1.5, caution_min: 1.0 }
+    interest_cover: { good_min: 3.0, caution_min: 1.5 }
+    dso_good_max_days: 40
+    runway_months_good_min: 6
+---
