@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       issue_number:
-        description: Issue number to scaffold from
+        description: "Issue number to scaffold from"
         required: true
         type: string
 
@@ -17,35 +17,29 @@ permissions:
 
 jobs:
   build-ui:
-    # Run if manually dispatched OR if the issue has the auto-pr-ui label
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' &&
-       contains(join(github.event.issue.labels.*.name, ','), 'auto-pr-ui'))
+    # Run when manually dispatched OR when the issue has the `auto-pr-ui` label
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'auto-pr-ui')) }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Resolve issue number
         id: meta
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "issue=${{ inputs.issue_number }}" >> $GITHUB_OUTPUT
+            echo "issue=${{ inputs.issue_number }}" >> "$GITHUB_OUTPUT"
           else
-            echo "issue=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+            echo "issue=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           fi
-          echo "stamp=$(date +%s)" >> $GITHUB_OUTPUT
+          echo "stamp=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Read & parse issue
         id: parse
         uses: actions/github-script@v7
         with:
           script: |
-            const issue_number = parseInt(core.getInput('issue')) || (
-              context.payload.issue ? context.payload.issue.number : 0
-            );
+            const issue_number = parseInt(process.env.ISSUE, 10);
             const { data } = await github.rest.issues.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -53,59 +47,53 @@ jobs:
             });
             const body = data.body || '';
 
-            function pick(re, d='') {
+            const get = (re, d='') => {
               const m = body.match(re);
               return m ? m[1].trim() : d;
-            }
+            };
 
-            // Pull fields from the issue body
-            const intent      = pick(/\[INTENT\]:\s*(.+)/i, 'page');
-            const routeRaw    = pick(/\[ROUTE\]:\s*(.+)/i, '/');
-            const pageTitle   = pick(/\[PAGE_TITLE\]:\s*(.+)/i, 'New Page');
-            const description = pick(/\[DESCRIPTION\]:\s*([\s\S]*?)(?:\n\[[A-Z_]+\]:|```|$)/i, '').trim();
-            const mTsx        = body.match(/```tsx([\s\S]*?)```/i);
-            const tsx         = mTsx ? mTsx[1].trim() : '';
-
-            // Normalize route to Next.js /app routing
-            let route = routeRaw.trim();
+            let route = get(/\[ROUTE\]:\s*(.+)/i, '/').trim();
             if (!route.startsWith('/')) route = '/' + route;
-            route = route.replace(/\/+$/, ''); // strip trailing slash except root
+            route = route.replace(/\/+$/, '');
 
-            core.setOutput('issue', issue_number.toString());
-            core.setOutput('intent', intent);
-            core.setOutput('route', route);
-            core.setOutput('pageTitle', pageTitle);
-            core.setOutput('description', description);
-            core.setOutput('tsx', tsx);
-          result-encoding: string
-        env:
-          issue: ${{ steps.meta.outputs.issue }}
+            const outputs = {
+              issue: issue_number.toString(),
+              intent: get(/\[INTENT\]:\s*(.+)/i, 'page'),
+              route,
+              title: get(/\[PAGE_TITLE\]:\s*(.+)/i, 'New Page'),
+              desc:  get(/\[DESCRIPTION\]:\s*([\s\S]*?)(?:\n\[[A-Z_]+\]:|```|$)/i, '').trim(),
+              tsx:   ((body.match(/```tsx([\s\S]*?)```/i) || [,''])[1]).trim()
+            };
+
+            for (const [k,v] of Object.entries(outputs)) core.setOutput(k, v);
+          env:
+            ISSUE: ${{ steps.meta.outputs.issue }}
 
       - name: Scaffold files
         id: scaffold
+        shell: bash
         run: |
           set -euo pipefail
-
           ROUTE="${{ steps.parse.outputs.route }}"
-          TITLE="${{ steps.parse.outputs.pageTitle }}"
-          DESC="${{ steps.parse.outputs.description }}"
-          TSX="${{ steps.parse.outputs.tsx }}"
+          TITLE="${{ steps.parse.outputs.title }}"
+          DESC="${{ steps.parse.outputs.desc }}"
+          TSX_CONTENT="${{ steps.parse.outputs.tsx }}"
 
           if [ "$ROUTE" = "/" ]; then
             DEST_DIR="app"
             DEST_FILE="app/page.tsx"
           else
-            CLEAN="${ROUTE#/}"           # drop leading slash
+            CLEAN="${ROUTE#/}"
             DEST_DIR="app/${CLEAN}"
             DEST_FILE="${DEST_DIR}/page.tsx"
           fi
 
-          mkdir -p "${DEST_DIR}"
+          mkdir -p "$DEST_DIR"
 
-          if [ -n "$TSX" ]; then
-            printf "%s\n" "$TSX" > "${DEST_FILE}"
+          if [ -n "$TSX_CONTENT" ]; then
+            printf "%s\n" "$TSX_CONTENT" > "$DEST_FILE"
           else
-cat > "${DEST_FILE}" <<'TSX'
+            cat > "$DEST_FILE" <<'TSX'
 /* auto-generated stub */
 import Link from "next/link";
 
@@ -116,9 +104,7 @@ export default function Page() {
         <h1 className="text-2xl font-semibold">__TITLE__</h1>
         <Link href="/" className="text-sm underline">Back to Dashboard</Link>
       </div>
-
       <p className="text-sm text-gray-600">__DESC__</p>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-xl border p-4">Replace me with real UI.</div>
         <div className="rounded-xl border p-4">Hook up real API calls.</div>
@@ -127,32 +113,25 @@ export default function Page() {
   );
 }
 TSX
-            # patch placeholders
-            sed -i "s#__TITLE__#${TITLE//\//\\/}#g" "${DEST_FILE}"
-            sed -i "s#__DESC__#${DESC//\//\\/}#g" "${DEST_FILE}"
+            sed -i "s#__TITLE__#${TITLE//\//\\/}#g" "$DEST_FILE"
+            sed -i "s#__DESC__#${DESC//\//\\/}#g" "$DEST_FILE"
           fi
 
-          echo "dest=${DEST_FILE}" >> $GITHUB_OUTPUT
+          echo "dest=$DEST_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Open pull request
+      - name: Create PR
         uses: peter-evans/create-pull-request@v6
         with:
           branch: auto/ui-${{ steps.meta.outputs.stamp }}
-          commit-message: |
-            feat(ui): scaffold ${{ steps.parse.outputs.pageTitle }} from issue #${{ steps.parse.outputs.issue }}
-          title: |
-            feat(ui): scaffold ${{ steps.parse.outputs.pageTitle }} from issue #${{ steps.parse.outputs.issue }}
+          commit-message: feat(ui): scaffold ${{ steps.parse.outputs.title }} from issue #${{ steps.parse.outputs.issue }}
+          title: feat(ui): scaffold ${{ steps.parse.outputs.title }} from issue #${{ steps.parse.outputs.issue }}
           body: |
-            Generated from issue #${{ steps.parse.outputs.issue }}
-            - **Intent:** `${{ steps.parse.outputs.intent }}`
-            - **Route:** `${{ steps.parse.outputs.route }}`
-            - **File:** `${{ steps.scaffold.outputs.dest }}`
-            - **Description:** ${{ steps.parse.outputs.description }}
+            Generated from issue #${{ steps.parse.outputs.issue }}.
+            - Intent: `${{ steps.parse.outputs.intent }}`
+            - Route: `${{ steps.parse.outputs.route }}`
+            - File: `${{ steps.scaffold.outputs.dest }}`
 
-            > Edit the stub and merge. Vercel will attach a preview to this PR.
-          labels: |
-            ui, automated
+            Edit the stub and merge. Vercel will attach a preview to this PR.
+          labels: auto-pr, ui
           add-paths: |
             app/**
-            lib/**
-            ops/**
