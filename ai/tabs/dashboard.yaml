@@ -1,0 +1,187 @@
+# ai/tabs/dashboard.yaml
+intent: dashboard
+enabled: true
+label: "Dashboard"
+description: >
+  Default opening tab. Returns top-level KPIs, snapshot headline + alert badges,
+  3–4 concise AI insights, upcoming reminders, and a short summary footer.
+  Also supports sub-actions for quick forecast, advisor Q&A, and reminder updates.
+
+input_schema:
+  type: object
+  properties:
+    action:
+      type: string
+      enum: [load, quick_forecast, ask_advisor, update_reminder]
+      description: |
+        load: return dashboard payload
+        quick_forecast: run 30/60/90 day cash projection
+        ask_advisor: answer a short business question
+        update_reminder: change reminder state
+    horizon_days:
+      type: integer
+      description: "Used when action=quick_forecast"
+    question:
+      type: string
+      description: "Used when action=ask_advisor"
+    id:
+      type: string
+      description: "Reminder id when action=update_reminder"
+    op:
+      type: string
+      enum: [complete, snooze, delegate]
+      description: "Operation for reminder update"
+  required: [action]
+  additionalProperties: true
+
+output_schema:
+  oneOf:
+    - type: object
+      title: DashboardPayload
+      properties:
+        kpis:
+          type: object
+          properties:
+            revenue_mtd:  { $ref: "#/definitions/KPI" }
+            net_profit_margin:
+              allOf:
+                - $ref: "#/definitions/KPI"
+                - type: object
+                  properties:
+                    margin_pct: { type: number }
+            cashflow_mtd:  { $ref: "#/definitions/KPI" }
+            runway_months: { $ref: "#/definitions/KPI" }
+            ai_health_score: { $ref: "#/definitions/KPI" }
+        snapshot:
+          type: object
+          properties:
+            headline: { type: string }
+            alerts:
+              type: array
+              items:
+                type: object
+                properties:
+                  kind: { type: string, enum: [red, yellow, green] }
+                  text: { type: string }
+        insights:
+          type: array
+          items: { type: object, properties: { text: { type: string } }, required: [text] }
+        reminders:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              text: { type: string }
+              due: { type: string }
+              severity: { type: string, enum: [low, med, high] }
+              status: { type: string, enum: [open, done, snoozed] }
+            required: [id, text]
+        summary: { type: string }
+      required: [kpis, insights]
+    - type: object
+      title: AdvisorResponse
+      properties:
+        advisor_reply: { type: string }
+      required: [advisor_reply]
+    - type: object
+      title: Ack
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+
+definitions:
+  KPI:
+    type: object
+    properties:
+      label: { type: string }
+      value:  { type: number }
+      unit:   { type: string }
+      trend_pct: { type: number }
+      href: { type: string }
+    required: [label, value]
+
+prompt:
+  system: |
+    You are LightSignal’s Orchestrator focused on producing a single JSON object that matches the output_schema.
+    IMPORTANT:
+    - Never include extra keys.
+    - Use short, plain language (no fluff).
+    - If data is missing, estimate with clearly labeled rationale (e.g., use last-12-months avg) and set trend_pct conservatively.
+    - For runway, months = max(0, floor(cash_on_hand / monthly_burn)).
+    - AI Health Score reflects data completeness + forecast confidence (0–100).
+    - Alerts:
+        red: runway < 3 months
+        yellow: spending spike detected
+        green: ahead of target
+    - Insight bullets must be actionable and concrete (<= 20 words).
+
+  user_template: |
+    Company ID: {{company_id}}
+    Action: {{action}}
+    Horizon Days: {{horizon_days}}
+    Question: {{question}}
+    Reminder Update: id={{id}} op={{op}}
+
+  fewshot:
+    - role: user
+      content: |
+        Company ID: demo
+        Action: load
+    - role: assistant
+      content: |
+        {
+          "kpis": {
+            "revenue_mtd":        { "label": "Revenue (MTD)", "value": 128000, "unit": "USD", "trend_pct": 7.2, "href": "/overview" },
+            "net_profit_margin":  { "label": "Net Profit / Margin %", "value": 35840, "unit": "USD", "trend_pct": 2.3, "margin_pct": 28.0, "href": "/overview" },
+            "cashflow_mtd":       { "label": "Cash Flow (MTD)", "value": 9100, "unit": "USD", "trend_pct": -3.1, "href": "/overview" },
+            "runway_months":      { "label": "Runway (Months)", "value": 5.0, "trend_pct": 0.0, "href": "/overview" },
+            "ai_health_score":    { "label": "AI Health Score", "value": 82, "unit": "/100", "trend_pct": 1.0, "href": "/overview" }
+          },
+          "snapshot": {
+            "headline": "Revenue up 7.2% vs last month · Expenses flat · Profit margin improved to 28%",
+            "alerts": [
+              { "kind": "green",  "text": "Ahead of target" }
+            ]
+          },
+          "insights": [
+            { "text": "Profit margin improved, but cash conversion slowed — accelerate invoice collection." },
+            { "text": "Labor costs trending 11% above peers." },
+            { "text": "Increase marketing by ~5% to sustain growth." }
+          ],
+          "reminders": [
+            { "id": "tax-qtr",   "text": "Quarterly tax payment due", "due": "in 6 days", "severity": "med", "status": "open" },
+            { "id": "insurance", "text": "Renew business insurance",  "due": "next week", "severity": "low", "status": "open" },
+            { "id": "payroll",   "text": "Payroll approval pending",  "due": "tomorrow",  "severity": "med", "status": "open" },
+            { "id": "invoices",  "text": "Follow up on 3 overdue invoices", "due": "today", "severity": "high", "status": "open" }
+          ],
+          "summary": "Cash healthy · Margins strong · No critical risks detected."
+        }
+
+    - role: user
+      content: |
+        Company ID: demo
+        Action: ask_advisor
+        Question: Can I afford to hire someone next month?
+    - role: assistant
+      content: |
+        { "advisor_reply": "Yes, if net new monthly expense <= $6k and runway stays >= 4 months after hire." }
+
+    - role: user
+      content: |
+        Company ID: demo
+        Action: quick_forecast
+        Horizon Days: 60
+    - role: assistant
+      content: |
+        { "ok": true }
+
+    - role: user
+      content: |
+        Company ID: demo
+        Action: update_reminder
+        id: tax-qtr
+        op: complete
+    - role: assistant
+      content: |
+        { "ok": true }
