@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="mx-auto max-w-5xl flex items-center gap-6 p-4">
             <Link href="/" className="font-semibold">LightSignal</Link>
             <Link href="/overview">Overview</Link>
-            <Link href="/scenarios">Scenarios</Link>
+            <Link href="/scenarios">Scenario Planning Lab</Link>
             <Link href="/insights">Insights</Link>
           </nav>
         </header>
