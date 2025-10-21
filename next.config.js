@@ -14,6 +14,13 @@ const nextConfig = {
       ...(config.resolve.alias || {}),
       "@": path.resolve(__dirname)
     };
+    
+    // Ensure react-is is properly resolved for recharts
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      "react-is": require.resolve("react-is")
+    };
+    
     return config;
   },
 
