@@ -13,7 +13,8 @@ export default function ForecastChat() {
     setLoading(true);
     setMessages((m) => [...m, { role: "user", content: q }]);
     try {
-      const resp = await fetch((process.env.NEXT_PUBLIC_API_URL || "/api") + "/api/ai/demand/ask", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "https://lightsignal-backend.onrender.com";
+      const resp = await fetch(`${apiUrl}/api/ai/demand/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: q }),

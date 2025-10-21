@@ -14,8 +14,8 @@ export default function DemandSimulator() {
   async function runSimulation() {
     setLoading(true);
     try {
-      const apiRoot = process.env.NEXT_PUBLIC_API_URL || "/api";
-      const resp = await fetch(`${apiRoot}/api/ai/demand/simulate`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "https://lightsignal-backend.onrender.com";
+      const resp = await fetch(`${apiUrl}/api/ai/demand/simulate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
