@@ -1,178 +1,106 @@
-"use client";
-import { useState } from "react";
-import { callResearch } from "../../lib/api";
+import React from "react";
+import KpiCard from "../../components/KpiCard";
+import InsightsClient from "./InsightsClient";
 
-export default function Insights() {
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [text, setText] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<any | null>(null);
+// STUB DATA - Safe fallback for static generation
+const STUB = {
+  kpis: [
+    { id: "top_performing", label: "Top Performing Area", value: "Service Revenue +12% MoM", benchmark: "Top quartile vs peers", state: "good" },
+    { id: "weakest_area", label: "Weakest Area / Risk", value: "AR Aging +10 days", benchmark: "Below median", state: "bad" },
+    { id: "profit_driver", label: "Profitability Driver", value: "Labor utilization +2.4 pts", state: "good" },
+    { id: "efficiency_score", label: "Efficiency Score", value: 73, peer_median: 65, state: "good" },
+    { id: "growth_index", label: "Growth Opportunity Index", value: 82, state: "good" }
+  ],
+  current_pulse: {
+    summary: [
+      "Revenue up 6% MoM; COGS up 8% — margins tighter.",
+      "Cash flow healthy; AR collections slowing.",
+      "Payroll stable; marketing ROI improving."
+    ],
+    strengths: ["Repeat customer sales", "Low fixed cost ratio", "High utilization"],
+    weaknesses: ["Rising vendor costs", "Slow collections", "High churn"],
+    heatmap: [
+      { dept: "Sales", metrics: { revenue_growth: "good", margin_pct: "caution", cost_efficiency: "good", ar_days: "caution" } },
+      { dept: "Ops", metrics: { revenue_growth: "stable", margin_pct: "caution", cost_efficiency: "bad", ar_days: "good" } }
+    ]
+  },
+  internal_analysis: {
+    profitability_trends: { text: "Gross margins declined from 41% → 37% last quarter.", delta_pct: -4.0 },
+    expense_outliers: { text: "Software costs grew 24% with no revenue lift.", category: "Software", delta_pct: 24.0 },
+    cash_health: { text: "Runway ~4.8 months; slightly above peers.", runway_months: 4.8 },
+    labor_productivity: { text: "Revenue/employee up 9% from utilization gains.", delta_pct: 9.0 },
+    trends: [
+      { metric: "margin_pct", series: [0.41, 0.39, 0.37] },
+      { metric: "expense_ratio", series: [0.58, 0.60, 0.61] },
+      { metric: "revenue", series: [120000, 128000, 135000] }
+    ]
+  },
+  peers: {
+    benchmarks: { rev_per_employee: 128000, peer_median_rev_per_employee: 115000, dso_days_peer: 36 },
+    insights: ["Peers reduced DSO from 42 → 36 days.", "Top-quartile firms trimmed COGS 6% via vendor renegotiations."],
+    sources: ["QuickBooks Cohort", "SBA/Census", "Public Filings", "Pinecone Peers"],
+    confidence: "medium"
+  },
+  recommendations: {
+    revenue_growth: [
+      { text: "Raise prices by 3%", expected_impact: { margin_pts: 1.8 }, confidence: "high", timeframe: "short", peer_validation: "Seen in 62% of peers", cta: { run_in_scenarios: true } },
+      { text: "Launch maintenance package", expected_impact: { revenue_pct: 6 }, confidence: "medium", timeframe: "medium", peer_validation: "Recurring uplift ~9%" }
+    ],
+    cost_efficiency: [ { text: "Renegotiate supplier contracts", expected_impact: { cogs_pct: -5 }, confidence: "medium", timeframe: "short" } ],
+    cash_liquidity: [ { text: "Shorten terms 45→35 days", expected_impact: { monthly_cash: 14000 }, confidence: "high", timeframe: "short" } ],
+    operations: [ { text: "Cross-train staff for seasonality", expected_impact: { utilization_pct: 3 }, confidence: "medium", timeframe: "medium" } ]
+  },
+  efficiency_roi: {
+    ratios: { revenue_per_employee: 128000, expense_ratio: 0.58, labor_utilization_pct: 78 },
+    roi_by_initiative: [ { name: "Customer retention", roi_x: 4.3, state: "good" }, { name: "Operations software", roi_x: 0.9, state: "bad" } ],
+    ai_summary: ["Most efficient spend: customer retention programs.", "Least efficient: software subscriptions (low ROI)."]
+  },
+  opportunities: [
+    { id: "geo_expansion", title: "Expand to adjacent zip codes", description: "Customer base concentrated; nearby demand visible.", score: 78, priority: "high", confidence: "medium" },
+    { id: "recurring_contracts", title: "Add recurring contracts", description: "Move one-time jobs to subscriptions.", score: 84, priority: "high", confidence: "high" }
+  ],
+  charts: {
+    profit_driver_breakdown: [ { driver: "Price", impact: 22000 }, { driver: "COGS", impact: -18000 }, { driver: "Volume", impact: 9000 } ],
+    peer_radar: { margins: 0.36, growth: 0.08, liquidity: 0.62 },
+    opportunity_matrix: [ { name: "Recurring contracts", impact: "high", difficulty: "medium" }, { name: "Geo expansion", impact: "medium", difficulty: "low" } ],
+    efficiency_trendline: [ { month: "2025-07", score: 68 }, { month: "2025-08", score: 71 }, { month: "2025-09", score: 73 } ]
+  },
+  export: { pdf_available: true, weekly_digest_available: true }
+};
 
-  const suggestions = [
-    "HVAC expansion in Austin, TX — market, labor, regulation",
-    "Phoenix labor market for HVAC techs — wages and licensing",
-    "Commercial rent & insurance trends in Dallas for small service shops",
-    "Seasonality and demand signals for residential HVAC in Nashville",
-  ];
-
-  async function run(q: string) {
-    setLoading(true);
-    setText(null);
-    setParsed(null);
-    try {
-      const res = await callResearch(q);
-      setText(res.text);
-      setParsed(res.parsed ?? null);
-    } catch (e) {
-      setText("Sorry — research request failed.");
-      setParsed(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const digest = parsed?.digest;
+// Server component - NO dynamic fetches for static generation compatibility
+export default function Page() {
+  // Use static data for now to avoid SSG issues
+  // In production, this could be moved to getStaticProps or use ISR
+  const data = STUB;
+  const usedStub = true;
 
   return (
     <main className="p-6 space-y-6">
-      <h2 className="text-xl font-semibold">Insights (Research Scout)</h2>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Business Insights</h1>
+          <p className="text-sm text-slate-500 mt-1">Analyst & Advisor view — performance, benchmarks, and recommended actions.</p>
+        </div>
+        <div className="text-sm text-slate-500">{usedStub ? "Using stub data" : "Live data"}</div>
+      </header>
 
-      <div className="rounded-2xl bg-white shadow-sm border p-4">
-        <div className="flex flex-wrap gap-2 mb-3">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              className="text-xs rounded-full border px-3 py-1 hover:bg-slate-50"
-              onClick={() => run(s)}
-              disabled={loading}
-            >
-              {s}
-            </button>
+      {/* KPI cards - Static display, no onClick handlers in server component */}
+      <section aria-labelledby="kpis">
+        <div id="kpis" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          {(data.kpis || []).map((k: any) => (
+            <KpiCard 
+              key={k.id || k.label} 
+              title={k.label} 
+              value={k.value?.toString?.() ?? "—"} 
+              subtitle={k.benchmark ?? (k.peer_median ? `Peer median: ${k.peer_median}` : undefined)} 
+            />
           ))}
         </div>
+      </section>
 
-        <div className="flex gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ask about a market/location/industry… e.g., 'HVAC in Austin: demand, labor, regulation'"
-            className="flex-1 rounded-xl border px-3 py-2"
-          />
-          <button
-            onClick={() => {
-              const q = query.trim();
-              if (q) run(q);
-            }}
-            disabled={loading || !query.trim()}
-            className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
-          >
-            {loading ? "Searching…" : "Search"}
-          </button>
-        </div>
-      </div>
-
-      {/* Pretty view if we have the rich digest */}
-      {digest && (
-        <section className="rounded-2xl bg-white shadow-sm border p-4 space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card title="Demand" items={digest.demand} />
-            <Card title="Competition" items={digest.competition} />
-            <Card
-              title="Labor"
-              items={[
-                digest?.labor?.availability_note,
-                digest?.labor?.licensing,
-                digest?.labor?.wage_range_hour
-                  ? `Wages: $${digest.labor.wage_range_hour[0]}–$${digest.labor.wage_range_hour[1]}/hr`
-                  : null,
-              ]}
-            />
-            <Card
-              title="Costs"
-              items={[
-                digest?.costs?.rent_note,
-                digest?.costs?.insurance_note,
-                digest?.costs?.fuel_or_materials_note,
-                digest?.costs?.tax_or_fee_note,
-              ]}
-            />
-            <Card title="Seasonality" items={[digest?.seasonality]} />
-            <Card title="Regulatory" items={digest.regulatory} />
-            <Card title="Customer Profile" items={digest.customer_profile} />
-            <Card title="Risks" items={digest.risks} />
-            <Card title="Opportunities" items={digest.opportunities} />
-          </div>
-
-          {Array.isArray(parsed?.benchmarks) && parsed.benchmarks.length > 0 && (
-            <div>
-              <div className="font-medium mb-1">Benchmarks</div>
-              <div className="flex flex-wrap gap-2 text-sm">
-                {parsed.benchmarks.map((b: any, i: number) => (
-                  <div key={i} className="rounded-full border px-3 py-1 bg-slate-50">
-                    <span className="text-slate-500 mr-1">{b.metric}:</span>
-                    {typeof b.peer_median === "number" ? b.peer_median : b.value ?? "—"}
-                    {b.region ? <span className="text-slate-500 ml-2">{b.region}</span> : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {Array.isArray(parsed?.sources) && parsed.sources.length > 0 && (
-            <div className="rounded-xl bg-slate-50 border p-3 text-sm">
-              <div className="font-medium mb-1">Sources</div>
-              <ul className="list-disc pl-6">
-                {parsed.sources.map((s: any, i: number) => (
-                  <li key={i}>
-                    {s.title}{" "}
-                    {s.url ? (
-                      <a
-                        className="text-sky-600 underline underline-offset-2"
-                        href={s.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        link
-                      </a>
-                    ) : null}{" "}
-                    {s.note ? <span className="text-slate-500">— {s.note}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {parsed?.so_what && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm">
-              <div className="font-medium mb-1">So what</div>
-              <div>{parsed.so_what}</div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Raw fallback (if not a digest shape) */}
-      {text && !digest && (
-        <section className="rounded-2xl bg-white shadow-sm border p-4">
-          <div className="font-medium mb-2">Raw result</div>
-          <pre className="text-xs overflow-x-auto">{text}</pre>
-        </section>
-      )}
+      {/* Hydrated interactive client component - All interactivity handled here */}
+      <InsightsClient initialData={data} />
     </main>
-  );
-}
-
-function Card({ title, items }: { title: string; items?: any[] }) {
-  const list = (items || []).filter(Boolean);
-  if (list.length === 0) return null;
-  return (
-    <div className="rounded-xl border p-3">
-      <div className="font-medium mb-2">{title}</div>
-      <ul className="list-disc pl-6 text-sm">
-        {list.map((x, i) => (
-          <li key={i}>{String(x)}</li>
-        ))}
-      </ul>
-    </div>
   );
 }
