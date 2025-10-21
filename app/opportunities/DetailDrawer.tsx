@@ -1,15 +1,18 @@
 "use client";
-import { addToWatchlist, simulateOpportunity } from "@/lib/api";
+import { addToOpportunitiesWatchlist } from "@/lib/api";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function DetailDrawer({ item, onClose }: { item: any; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
   async function save() {
     setBusy(true);
     try {
-      await addToWatchlist({
+      await addToOpportunitiesWatchlist({
         company_id: "demo",
+        id: item.id,
         title: item.title,
         category: item.category || "other",
         deadline: item.deadline,
@@ -28,8 +31,11 @@ export default function DetailDrawer({ item, onClose }: { item: any; onClose: ()
   async function simulate() {
     setBusy(true);
     try {
-      await simulateOpportunity(item, "demo");
-      alert("Simulated (stub). We can wire to Scenario Lab next.");
+      // navigate to /scenarios with type and id query params
+      const searchParams = new URLSearchParams();
+      if (item.category) searchParams.set("type", item.category);
+      if (item.id) searchParams.set("id", item.id);
+      router.push(`/scenarios?${searchParams.toString()}`);
     } finally {
       setBusy(false);
     }
