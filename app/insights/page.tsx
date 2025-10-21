@@ -1,9 +1,8 @@
 import React from "react";
 import KpiCard from "../../components/KpiCard";
 import InsightsClient from "./InsightsClient";
-import { callIntent } from "../../lib/api";
 
-// Server component: fetch backend-first via callIntent("business_insights", input, "demo")
+// STUB DATA - Safe fallback for static generation
 const STUB = {
   kpis: [
     { id: "top_performing", label: "Top Performing Area", value: "Service Revenue +12% MoM", benchmark: "Top quartile vs peers", state: "good" },
@@ -69,37 +68,13 @@ const STUB = {
   export: { pdf_available: true, weekly_digest_available: true }
 };
 
-export default async function Page() {
-  const apiRoot = process.env.NEXT_PUBLIC_API_URL;
-  const endpoint = apiRoot ? `${apiRoot.replace(/\/$/, "")}/api/ai/insights/full` : undefined;
+// Server component - NO dynamic fetches for static generation compatibility
+export default function Page() {
+  // Use static data for now to avoid SSG issues
+  // In production, this could be moved to getStaticProps or use ISR
+  const data = STUB;
+  const usedStub = true;
 
-  // Build request payload
-  const payload = { company_id: "demo", range: "MTD", horizon: "12m", include_peers: true };
-
-  let data: any = STUB;
-  let usedStub = true;
-  try {
-    // Prefer callIntent if available (lib/api exports it)
-    if (typeof callIntent === "function") {
-      const res = await callIntent("business_insights", payload, "demo");
-      if (res && typeof res === "object") {
-        data = res;
-        usedStub = false;
-      }
-    } else if (endpoint) {
-      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), cache: "no-store" });
-      if (res.ok) {
-        const json = await res.json();
-        data = json;
-        usedStub = false;
-      }
-    }
-  } catch (err) {
-    // keep stub and log server-side
-    console.error("insights fetch failed:", err);
-  }
-
-  // Render server component page skeleton and hydrate client with data
   return (
     <main className="p-6 space-y-6">
       <header className="flex items-start justify-between">
@@ -110,34 +85,21 @@ export default async function Page() {
         <div className="text-sm text-slate-500">{usedStub ? "Using stub data" : "Live data"}</div>
       </header>
 
-      {/* KPI cards */}
+      {/* KPI cards - Static display, no onClick handlers in server component */}
       <section aria-labelledby="kpis">
         <div id="kpis" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-          {(data.kpis || []).map((k: any, idx: number) => {
-            const sectionMap = ['pulse', 'analysis', 'peers', 'recs', 'eff'];
-            const targetSection = sectionMap[idx] || 'pulse';
-            
-            return (
-              <div 
-                key={k.id || k.label} 
-                className="cursor-pointer transform transition-transform hover:scale-105"
-                onClick={() => {
-                  const element = document.getElementById(targetSection);
-                  if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-              >
-                <KpiCard 
-                  title={k.label} 
-                  value={k.value?.toString?.() ?? "—"} 
-                  subtitle={k.benchmark ?? (k.peer_median ? `Peer median: ${k.peer_median}` : undefined)} 
-                />
-              </div>
-            );
-          })}
+          {(data.kpis || []).map((k: any) => (
+            <KpiCard 
+              key={k.id || k.label} 
+              title={k.label} 
+              value={k.value?.toString?.() ?? "—"} 
+              subtitle={k.benchmark ?? (k.peer_median ? `Peer median: ${k.peer_median}` : undefined)} 
+            />
+          ))}
         </div>
       </section>
 
-      {/* Hydrated interactive client; pass the full data object */}
+      {/* Hydrated interactive client component - All interactivity handled here */}
       <InsightsClient initialData={data} />
     </main>
   );

@@ -35,6 +35,30 @@ export default function InsightsClient({ initialData }: { initialData: any }) {
 
   return (
     <div className="space-y-6">
+      {/* Clickable KPI section anchors */}
+      <section className="rounded-2xl bg-white shadow-sm border p-4">
+        <div className="text-sm text-slate-600 mb-3">Click sections below to navigate:</div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'pulse', label: '💹 Business Pulse' },
+            { id: 'analysis', label: '🤖 AI Analysis' },
+            { id: 'peers', label: '👥 Peer Intelligence' },
+            { id: 'recs', label: '🧭 Recommendations' },
+            { id: 'eff', label: '⚙️ Efficiency' },
+            { id: 'opp', label: '🚀 Opportunities' },
+            { id: 'reports', label: '📊 Reports' }
+          ].map(section => (
+            <button
+              key={section.id}
+              onClick={() => scrollToSection(section.id)}
+              className="text-sm rounded-full border px-3 py-1 hover:bg-slate-50 transition-colors"
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* 1. Current Business Pulse */}
       <section className="rounded-2xl bg-white shadow-sm border p-4" aria-labelledby="pulse">
         <div className="flex items-center justify-between">
