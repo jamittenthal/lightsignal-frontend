@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchScenarioFull } from "../../lib/api";
 
 const COMPANY_ID = "demo";
@@ -70,7 +71,8 @@ const STUB_DATA = {
   ]
 };
 
-export default function ScenariosPage() {
+function ScenariosContent() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any | null>(null);
   const [horizon, setHorizon] = useState<string>("12m");
@@ -79,6 +81,29 @@ export default function ScenariosPage() {
   const [stressText, setStressText] = useState<string>('{"recession_prob": 0.25, "supply_shock": 0.15}');
   const [chat, setChat] = useState<any[]>([]);
   const [inputText, setInputText] = useState<string>("");
+
+  // Handle lever query parameter from payroll page
+  useEffect(() => {
+    const leverParam = searchParams?.get('lever');
+    if (leverParam) {
+      try {
+        const leverData = JSON.parse(decodeURIComponent(leverParam));
+        if (leverData.category === 'staffing') {
+          const staffingLevers = {
+            hire_count: leverData.value || 1,
+            avg_salary: leverData.avg_salary || 62000,
+            role: leverData.role || 'New Hire'
+          };
+          setLeversText(JSON.stringify(staffingLevers, null, 2));
+          setChat([
+            { role: 'assistant', text: `Auto-loaded staffing scenario: ${leverData.role} hire at $${leverData.avg_salary}/yr. Review assumptions and run simulation.` }
+          ]);
+        }
+      } catch (e) {
+        console.warn('Failed to parse lever query parameter:', e);
+      }
+    }
+  }, [searchParams]);
 
   // Fetch scenario data on mount
   useEffect(() => {
@@ -414,5 +439,24 @@ export default function ScenariosPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ScenariosPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-4 max-w-6xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-slate-200 rounded w-64"></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-24 bg-slate-200 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    }>
+      <ScenariosContent />
+    </Suspense>
   );
 }
