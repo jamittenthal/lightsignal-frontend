@@ -459,3 +459,184 @@ export async function fetchScenarioFull(body: any, companyId: string = "demo") {
     }
   }
 }
+
+// ---------- Opportunities: backend-first helpers + safe stub fallback ----------
+export const OPPORTUNITIES_STUB = {
+  kpis: [
+    { id: "active", label: "Active Opportunities", value: 8, note: "8 new matches this week", state: "good" },
+    { id: "potential_value", label: "Potential Revenue Value", value: 560000, formatted: "$560,000", state: "good" },
+    { id: "fit_score_avg", label: "Fit Score (Avg)", value: 82, state: "good" },
+    { id: "event_readiness", label: "Event Readiness Index", value: 88, state: "good" },
+    { id: "historical_roi", label: "Historical ROI", value: 2.9, unit: "x", state: "good" }
+  ],
+  profile: {
+    business_type: "Food Truck",
+    region: "Tampa, FL",
+    radius_miles: 50,
+    types: ["event","rfp","grant","partnership"],
+    budget_max: 5000,
+    travel_range_miles: 60,
+    staffing_capacity: "normal",
+    risk_appetite: "low",
+    auto_sync: true
+  },
+  feed: [
+    {
+      id: "EVT-TPA-1103",
+      title: "Tampa Outdoor Market",
+      source: "City Events",
+      category: "event",
+      event_date: "2025-11-03",
+      est_revenue: 3400,
+      est_cost: 250,
+      fit_score: 90,
+      confidence: "high",
+      peer_outcome: "Avg vendor profit $3.4k, ROI 2.7×",
+      weather: { temp_f: 75, rain_pct: 10, wind_mph: 8, attendance_impact: "high" },
+      actions: { view_details: true, save: true, simulate: true }
+    },
+    {
+      id: "RFP-CITY-HVAC-180K",
+      title: "City HVAC Maintenance Bid",
+      source: "Procurement Portal",
+      category: "rfp",
+      deadline: "2025-11-12",
+      est_revenue: 180000,
+      est_cost: 12000,
+      fit_score: 91,
+      confidence: "medium",
+      peer_outcome: "Peer win rate 38%",
+      actions: { view_details: true, save: true, simulate: true }
+    },
+    {
+      id: "GRANT-SMB-20K",
+      title: "State Small Business Grant",
+      source: "State Gov",
+      category: "grant",
+      deadline: "2025-11-30",
+      est_revenue: 20000,
+      est_cost: 0,
+      fit_score: 78,
+      confidence: "medium",
+      peer_outcome: "Avg award $14k",
+      actions: { view_details: true, save: true, simulate: true }
+    }
+  ],
+  details: {
+    "EVT-TPA-1103": {
+      summary: "Outdoor market with ~7,000 attendees.",
+      financials: { total_cost: 2300, potential_gross_profit: 4800, roi_x: 2.1 },
+      peers: { participants: 5, profitable: 3, avg_margin_pct: 19 },
+      weather: { temp_f: 72, rain_pct: 10, wind_mph: 8, note: "High attendance probability" },
+      ai_commentary: "Strong alignment with your audience; peer ROI 2.4×.",
+      links: [{ label: "Registration", url: "https://example.com/reg" }]
+    }
+  },
+  watchlist: [
+    { id: "EVT-TPA-1103", title: "Tampa Outdoor Market", status: "Open", when: "2025-11-03", expected_roi_x: 2.2 },
+    { id: "RFP-CITY-HVAC-180K", title: "City HVAC Maintenance Bid", status: "Applied", when: "2025-11-12", expected_roi_x: 3.1 }
+  ],
+  cost_roi_insights: {
+    avg_roi_by_category: { rfp: 3.2, event: 1.9, partnership: 2.6 },
+    top_activity: "Recurring local events",
+    peer_compare_note: "You outperform peers by +0.4× on food festivals",
+    ai_commentary: ["Best in weekend events with <10% rain risk", "Low success rate in federal contracts"]
+  },
+  events_explorer: [
+    { id: "EVT-IND-EXPO", title: "Regional Industry Expo", date: "2025-12-05", fit_score: 81, weather_badge: { good_weather: true, rain_pct: 5 }, attendance_impact: "medium" }
+  ],
+  contracts: [
+    { id: "RFP-COUNTY-COOL-250K", title: "County Cooling Upgrade", deadline: "2025-12-01", size: 250000, term_months: 24, competition: "medium", peer_win_rate: 0.31, confidence: 0.87 }
+  ],
+  seasonality: {
+    best_windows: ["Apr-Jun", "Sep-Oct"],
+    event_climate_outlook: [
+      { month: "Apr", attendance_bump_pct: 18 },
+      { month: "May", attendance_bump_pct: 16 }
+    ]
+  },
+  performance_analytics: {
+    wins: 7, losses: 3,
+    roi_by_category: { event: 2.1, rfp: 3.0, partnership: 2.6 },
+    learning_notes: ["Increase focus on community festivals", "Reduce long-distance listings"]
+  },
+  export: { pdf_available: true, csv_available: true, collab: true }
+};
+
+export async function fetchOpportunitiesFull(
+  body: any = {},
+  companyId: string = "demo"
+) {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/opportunities/full`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, ...body }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`opportunities full API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // safe stub fallback
+    return OPPORTUNITIES_STUB;
+  }
+}
+
+export async function searchOpportunities(
+  body: any = {},
+  companyId: string = "demo"
+) {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/opportunities/search`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, ...body }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`opportunities search API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // fallback: return minimal shape
+    return { feed: [], ok: false, error: (e && (e as any).message) || "search failed" };
+  }
+}
+
+export async function fetchOpportunityDetail(id: string, companyId: string = "demo") {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/opportunities/detail`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, id }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`opportunity detail API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // try stub details
+    return OPPORTUNITIES_STUB.details?.[id] || null;
+  }
+}
+
+export async function addToOpportunitiesWatchlist(item: any, companyId: string = "demo") {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/opportunities/watchlist`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, ...item }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`watchlist API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // best-effort: return array with the item
+    return [item];
+  }
+}
