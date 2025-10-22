@@ -11,7 +11,6 @@ export default async function AssetsPage() {
 
       <div className="rounded-2xl border bg-white p-4">
         {/* AssetsClient handles fetching and interactive UI */}
-        {/* @ts-expect-error Async server component will render client */}
         <AssetsClient />
       </div>
     </div>
