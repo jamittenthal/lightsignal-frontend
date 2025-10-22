@@ -21,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/payroll">Payroll & Hiring</Link>
               <Link href="/scenarios">Scenario Planning Lab</Link>
               <Link href="/insights">Insights</Link>
+              <Link href="/reviews">Customer Reviews & Reputation Intelligence</Link>
               <Link href="/assets">Asset Management</Link>
               <Link href="/settings">Settings</Link>
             </nav>
