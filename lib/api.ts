@@ -623,6 +623,132 @@ export async function fetchOpportunityDetail(id: string, companyId: string = "de
   }
 }
 
+// ---------- Reviews / Reputation helpers (backend-first, safe stub fallback) ----------
+export const REVIEWS_STUB = {
+  kpis: [
+    { id: "avg_rating", label: "Average Rating (All Platforms)", value: 4.6, count: 1243, state: "good", note: "Weighted across Google/Yelp/Facebook" },
+    { id: "volume_30d", label: "Review Volume (30 Days)", value: 42, delta_pct: 0.12, state: "good" },
+    { id: "sentiment_score", label: "Sentiment Score", value: 78, state: "good" },
+    { id: "sentiment_split", label: "Positive / Neutral / Negative", value: { pos: 0.78, neu: 0.12, neg: 0.10 }, state: "good" },
+    { id: "response_rate", label: "Response Rate", value: 0.63, formatted: "63%", state: "caution" },
+    { id: "csi", label: "Customer Satisfaction Index", value: 82, state: "good" }
+  ],
+  integrations: [
+    { id: "google", name: "Google Business", status: "connected", last_sync: "2025-10-20T14:12:00Z" },
+    { id: "yelp", name: "Yelp", status: "connected", last_sync: "2025-10-20T14:12:00Z" },
+    { id: "facebook", name: "Facebook", status: "connected", last_sync: "2025-10-20T14:12:00Z" }
+  ],
+  feed: [
+    {
+      id: "rev_g_101",
+      platform: "google",
+      rating: 5,
+      text: "Super friendly staff and fast service!",
+      author: "Alex R.",
+      created_at: "2025-10-19",
+      sentiment: "positive",
+      sentiment_score: 0.91,
+      keywords: ["staff","speed"],
+      location: "Downtown",
+      product: null,
+      responded: true,
+      response: "Thanks so much, Alex! See you again soon."
+    },
+    {
+      id: "rev_y_77",
+      platform: "yelp",
+      rating: 2,
+      text: "Delivery was late and packaging leaked.",
+      author: "Emily S.",
+      created_at: "2025-10-18",
+      sentiment: "negative",
+      sentiment_score: 0.18,
+      keywords: ["delivery","packaging"],
+      location: "Suburb",
+      product: "Cold Brew Kit",
+      responded: false,
+      response: null
+    }
+  ],
+  analysis: {
+    keywords_top: [{ term: "staff", count: 143 }, { term: "delivery", count: 58 }],
+    themes_positive: ["Friendly staff","Fast service","Good prices"],
+    themes_negative: ["Slow delivery","Packaging issues","Billing confusion"],
+    trend_notes: ["Sentiment +6 pts MoM","Delivery complaints down 18%"]
+  },
+  by_location: [
+    { location: "Downtown", avg_rating: 4.8, sentiment: 82, volume_30d: 21 },
+    { location: "Suburb", avg_rating: 4.3, sentiment: 68, volume_30d: 14 }
+  ],
+  by_product: [
+    { product: "Cold Brew Kit", avg_rating: 4.9, sentiment: 88 },
+    { product: "Grinder", avg_rating: 3.8, sentiment: 55 }
+  ],
+  recommendations: [
+    { id: "rec_packaging", text: "Improve packaging consistency; leaky lids mentioned 17× this month.", impact: "medium", confidence: "high", cta: "Add to Task List" }
+  ],
+  campaigns: { qr_pages: [{ id: "qr_main", title: "Main Review QR", url: "https://example.com/r/main", scan_count: 128 }] },
+  reports: { pdf_available: true, csv_available: true }
+};
+
+export async function fetchReviewsFull(body: any = {}, companyId: string = "demo") {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/reviews/full`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, ...body }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`reviews full API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // try secondary fallback via callIntent helper if available
+    try {
+      return await callIntent("reviews_intelligence", { company_id: companyId, ...body }, companyId);
+    } catch (e2) {
+      return REVIEWS_STUB as any;
+    }
+  }
+}
+
+export async function draftReviewReply(reviewId: string, body: any = {}, companyId: string = "demo") {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/reviews/respond`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, review_id: reviewId, draft: true, ...body }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`respond API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // safe stub: return a polite draft
+    return { draft: `Hi, thanks for your feedback — we're sorry to hear about this. We'll follow up to make it right.` };
+  }
+}
+
+export async function askReputationAdvisor(query: string, filters: any = {}, companyId: string = "demo") {
+  try {
+    const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+    const url = `${apiRoot.replace(/\/$/, "")}/api/ai/reviews/ask`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, query, filters }),
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error(`advisor API failed (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    // fallback: simple answer
+    return { answer: `I found ${REVIEWS_STUB.analysis.keywords_top?.length || 0} top topics. Try filtering by "delivery".` };
+  }
+}
+
 export async function addToOpportunitiesWatchlist(item: any, companyId: string = "demo") {
   try {
     const apiRoot = process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
