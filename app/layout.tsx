@@ -16,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/overview">Overview</Link>
               <Link href="/opportunities">Opportunities</Link>
               <Link href="/health">Business Health</Link>
+              <Link href="/fraud-compliance">Fraud & Compliance</Link>
               <Link href="/tax">Tax Optimization</Link>
               <Link href="/demand">Demand Forecasting</Link>
               <Link href="/debt">Debt Management Advisor</Link>
