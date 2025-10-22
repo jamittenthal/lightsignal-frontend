@@ -54,9 +54,23 @@ export default function ReviewsClient({ initialData }: { initialData: any }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {(kpis.length ? kpis : []).map((k: any) => (
-          <KpiCard key={k.id} title={k.label} value={k.formatted ?? (typeof k.value === 'number' ? (k.id==='avg_rating'? `${k.value} ★`: k.value) : k.value)} subtitle={k.note} />
-        ))}
+        {(kpis.length ? kpis : []).map((k: any) => {
+          let displayValue = k.formatted;
+          if (!displayValue) {
+            if (k.id === 'sentiment_split' && typeof k.value === 'object' && k.value) {
+              // Handle sentiment split object: convert to formatted string
+              const { pos, neu, neg } = k.value;
+              displayValue = `${formatPct(pos)} pos, ${formatPct(neu)} neu, ${formatPct(neg)} neg`;
+            } else if (typeof k.value === 'number') {
+              displayValue = k.id === 'avg_rating' ? `${k.value} ★` : k.value;
+            } else {
+              displayValue = k.value;
+            }
+          }
+          return (
+            <KpiCard key={k.id} title={k.label} value={displayValue} subtitle={k.note} />
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
