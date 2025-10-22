@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/health">Business Health</Link>
               <Link href="/tax">Tax Optimization</Link>
               <Link href="/demand">Demand Forecasting</Link>
+              <Link href="/debt">Debt Management Advisor</Link>
               <Link href="/inventory">Inventory & Multi-Location</Link>
               <Link href="/payroll">Payroll & Hiring</Link>
               <Link href="/scenarios">Scenario Planning Lab</Link>
