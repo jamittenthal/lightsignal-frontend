@@ -1,4 +1,5 @@
 // app/layout.tsx
+import React from "react";
 import "./globals.css";
 import Link from "next/link";
 import { ToastProvider } from "../components/ui/ToastProvider";
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/insights">Insights</Link>
               <Link href="/reviews">Customer Reviews & Reputation Intelligence</Link>
               <Link href="/assets">Asset Management</Link>
+              <Link href="/users">User Management</Link>
               <Link href="/settings">Settings</Link>
             </nav>
           </header>
