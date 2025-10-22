@@ -628,9 +628,22 @@ export default function ProfilePage() {
           </div>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <textarea className="md:col-span-3 w-full p-3 border rounded" value={data?.objectives?.short_term ?? ''} onChange={(e)=> updateLocal('objectives.short_term', e.target.value)} onBlur={(e)=> saveFieldDebounced('objectives.short_term', e.target.value)} />
-            <textarea className="md:col-span-3 w-full p-3 border rounded" value={data?.objectives?.mid_term ?? ''} onChange={(e)=> updateLocal('objectives.mid_term', e.target.value)} onBlur={(e)=> saveFieldDebounced('objectives.mid_term', e.target.value)} />
-            <textarea className="md:col-span-3 w-full p-3 border rounded" value={data?.objectives?.long_term ?? ''} onChange={(e)=> updateLocal('objectives.long_term', e.target.value)} onBlur={(e)=> saveFieldDebounced('objectives.long_term', e.target.value)} />
+            <div className="md:col-span-3">
+              <label className="text-xs text-gray-600">Short-term</label>
+              <textarea className="w-full mt-1 p-3 border rounded" rows={3} value={data?.objectives?.short_term ?? ''} onChange={(e)=> updateLocal('objectives.short_term', e.target.value)} onBlur={(e)=> saveFieldDebounced('objectives.short_term', e.target.value)} />
+            </div>
+            <div className="md:col-span-3">
+              <label className="text-xs text-gray-600">Mid-term</label>
+              <textarea className="w-full mt-1 p-3 border rounded" rows={3} value={data?.objectives?.mid_term ?? ''} onChange={(e)=> updateLocal('objectives.mid_term', e.target.value)} onBlur={(e)=> saveFieldDebounced('objectives.mid_term', e.target.value)} />
+            </div>
+            <div className="md:col-span-3">
+              <label className="text-xs text-gray-600">Long-term</label>
+              <textarea className="w-full mt-1 p-3 border rounded" rows={3} value={data?.objectives?.long_term ?? ''} onChange={(e)=> updateLocal('objectives.long_term', e.target.value)} onBlur={(e)=> saveFieldDebounced('objectives.long_term', e.target.value)} />
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <strong>Info:</strong> Used to tailor Scenario Lab, Business Insights, Tax Optimization, Success Planning.
           </div>
         </section>
       </div>
@@ -740,7 +753,16 @@ export default function ProfilePage() {
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-gray-500"><th className="px-2 py-2">File</th><th className="px-2 py-2">Type</th><th className="px-2 py-2">Issuer</th><th className="px-2 py-2">Effective</th><th className="px-2 py-2">Expiration</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Actions</th></tr>
+                  <tr className="text-left text-xs text-gray-500">
+                    <th className="px-2 py-2">File</th>
+                    <th className="px-2 py-2">Type</th>
+                    <th className="px-2 py-2">Issuer</th>
+                    <th className="px-2 py-2">Category</th>
+                    <th className="px-2 py-2">Effective</th>
+                    <th className="px-2 py-2">Expiration</th>
+                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2">Actions</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {(data?.uploads||[]).map((u:any)=> (
@@ -748,10 +770,13 @@ export default function ProfilePage() {
                       <td className="px-2 py-2">{u.file}</td>
                       <td className="px-2 py-2">{u.type}</td>
                       <td className="px-2 py-2">{u.issuer}</td>
+                      <td className="px-2 py-2">{u.category || '—'}</td>
                       <td className="px-2 py-2">{u.effective}</td>
                       <td className="px-2 py-2">{u.expiration ?? '—'}</td>
                       <td className="px-2 py-2">{u.status}</td>
-                      <td className="px-2 py-2"> <button className="text-sm px-2 py-1 border rounded">Download</button></td>
+                      <td className="px-2 py-2">
+                        <button className="text-sm px-2 py-1 border rounded hover:bg-gray-50">Download</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
