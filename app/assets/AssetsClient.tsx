@@ -126,7 +126,7 @@ export default function AssetsClient() {
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-        <KpiCard title={`Total Assets (${Object.keys(kpis.total_assets_by_type || {}).length})`} value={Object.values(kpis.total_assets_by_type || {}).reduce((a: any,b:any)=>a+b,0)}>
+    <KpiCard title={`Total Assets (${Object.keys(kpis.total_assets_by_type || {}).length})`} value={Number(Object.values(kpis.total_assets_by_type || {}).reduce((a: any,b:any)=>a+b,0))}>
           <div className="text-xs text-slate-500 mt-2">Breakdown: {(kpis.total_assets_by_type && Object.entries(kpis.total_assets_by_type).map(([k,v])=>`${k}: ${v}`).join(' · ')) || '—'}</div>
         </KpiCard>
 
