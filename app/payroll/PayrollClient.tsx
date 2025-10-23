@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useDemoAwareNavigation } from "../../lib/navigation";
 import KpiCard from "../../components/KpiCard";
 
 function ShimmerCard() {
@@ -36,18 +36,18 @@ type PlannerInputs = {
   start_month: string;
 };
 
-export default function PayrollClient({ initialPlanner }: { initialPlanner?: Partial<PlannerInputs> }) {
-  const router = useRouter();
+export default function PayrollClient() {
+  const { navigate } = useDemoAwareNavigation();
   const [inputs, setInputs] = useState<PlannerInputs>({
-    role: initialPlanner?.role || "Field Tech",
-    base_salary: initialPlanner?.base_salary || 62000,
+    role: "Field Tech",
+    base_salary: 62000,
     hourly: false,
-    hours_per_week: initialPlanner?.hours_per_week || 40,
-    benefits_pct: initialPlanner?.benefits_pct || 12,
-    payroll_tax_pct: initialPlanner?.payroll_tax_pct || 7.65,
-    overhead_pct: initialPlanner?.overhead_pct || 6,
-    one_time_costs: initialPlanner?.one_time_costs || 1800,
-    start_month: initialPlanner?.start_month || new Date().toISOString().slice(0,7),
+    hours_per_week: 40,
+    benefits_pct: 12,
+    payroll_tax_pct: 7.65,
+    overhead_pct: 6,
+    one_time_costs: 1800,
+    start_month: new Date().toISOString().slice(0,7),
   });
 
   const [running, setRunning] = useState(false);
@@ -89,7 +89,7 @@ export default function PayrollClient({ initialPlanner }: { initialPlanner?: Par
     };
     // encode in query for simplicity
     const q = encodeURIComponent(JSON.stringify(payload));
-    router.push(`/scenarios?lever=${q}`);
+    navigate(`/scenarios?lever=${q}`);
   }
 
   async function addPlannedHire() {

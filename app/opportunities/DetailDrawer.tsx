@@ -1,11 +1,11 @@
 "use client";
 import { addToOpportunitiesWatchlist } from "@/lib/api";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useDemoAwareNavigation } from "../../lib/navigation";
 
 export default function DetailDrawer({ item, onClose }: { item: any; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
+  const { navigate } = useDemoAwareNavigation();
 
   async function save() {
     setBusy(true);
@@ -35,7 +35,7 @@ export default function DetailDrawer({ item, onClose }: { item: any; onClose: ()
       const searchParams = new URLSearchParams();
       if (item.category) searchParams.set("type", item.category);
       if (item.id) searchParams.set("id", item.id);
-      router.push(`/scenarios?${searchParams.toString()}`);
+      navigate(`/scenarios?${searchParams.toString()}`);
     } finally {
       setBusy(false);
     }

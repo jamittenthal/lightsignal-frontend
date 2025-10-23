@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useDemoAwareNavigation } from "../../lib/navigation";
 import ProvenanceBadge from "../../lib/components/ProvenanceBadge";
 import { TrendlineChart, BarChart, RadarChart, OpportunityMatrix } from "../../components/charts/SimpleCharts";
 
@@ -13,9 +13,9 @@ function Tooltip({ text }: { text: string }) {
   return <span className="text-xs text-slate-500">{text}</span>;
 }
 
-export default function InsightsClient({ initialData }: { initialData: any }) {
-  const router = useRouter();
-  const d = initialData || {};
+export default function InsightsClient() {
+  const { navigate } = useDemoAwareNavigation();
+  const d: any = {};
 
   function runScenario(leverId?: string) {
     // Pre-fill query via URL params; simple lever mapping
@@ -23,7 +23,7 @@ export default function InsightsClient({ initialData }: { initialData: any }) {
     if (leverId === "price_up_3") params.set("lever", "price_up_3");
     else if (leverId === "shorten_terms") params.set("lever", "shorten_terms_45_35");
     else params.set("from", "insights");
-    router.push(`/scenarios?${params.toString()}`);
+    navigate(`/scenarios?${params.toString()}`);
   }
 
   function scrollToSection(sectionId: string) {

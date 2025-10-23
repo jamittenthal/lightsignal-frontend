@@ -19,7 +19,20 @@ function isPublicPath(path: string) {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  
+  // If this is a demo-prefixed app route like /demo/overview,
+  // rewrite it to the corresponding internal path (/overview) so the
+  // same app pages render, while keeping the browser URL as /demo/overview.
+  // We skip rewriting the /demo root itself.
+  if (pathname.startsWith('/demo') && pathname !== '/demo' && pathname !== '/demo/') {
+    // avoid rewriting static or api routes accidentally
+    if (!pathname.startsWith('/demo/_next') && !pathname.startsWith('/demo/api')) {
+      const target = pathname.replace(/^\/demo/, '') || '/';
+      const url = req.nextUrl.clone();
+      url.pathname = target;
+      return NextResponse.rewrite(url);
+    }
+  }
+
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
