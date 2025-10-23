@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { callIntent, BACKEND_URL } from "../../lib/api";
 import { ConnectionCard, type Connection } from "../../components/settings/ConnectionCard";
 import { ProvenancePanel } from "../../components/settings/ProvenancePanel";
+import QuickBooksCard from "../../components/settings/QuickBooksCard";
 import { AssistantPanel } from "../../components/settings/AssistantPanel";
 import { MaskedInput, ImportExportControls } from "../../components/settings/SettingsControls";
 import { AuditLog } from "../../components/settings/AuditLog";
@@ -111,6 +112,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<string>('general');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  // Feature flag: show temporary company selector for testing if true
+  const SHOW_COMPANY_SELECTOR = true;
+  const [overrideCompanyId, setOverrideCompanyId] = useState<string | null>(null);
   const [syncingProviders, setSyncingProviders] = useState<Set<string>>(new Set());
 
   async function fetchSettings() {
@@ -313,6 +317,15 @@ export default function SettingsPage() {
           <h2 className="text-xl font-semibold">Settings</h2>
           <p className="text-sm text-gray-600">Manage company settings, integrations, privacy, notifications, and more.</p>
         </div>
+        {SHOW_COMPANY_SELECTOR && (
+          <div className="text-sm">
+            <label className="text-xs text-gray-500 mr-2">Company:</label>
+            <select className="px-2 py-1 border rounded" value={overrideCompanyId ?? (settings.general?.demo_mode ? 'demo' : settings.general?.company_name ?? 'org')} onChange={(e)=> setOverrideCompanyId(e.target.value)}>
+              <option value="demo">Demo</option>
+              <option value={settings.general?.company_name || 'org'}>Real ( {settings.general?.company_name || 'org'} )</option>
+            </select>
+          </div>
+        )}
         <div className="text-sm">
           <div className="flex items-center gap-3">
             <div className="text-xs text-gray-500">Source: {settings._meta?.source ?? '—'}</div>
@@ -439,6 +452,13 @@ export default function SettingsPage() {
                   <div className="font-semibold">{cat[0].toUpperCase()+cat.slice(1)}</div>
                 </div>
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {cat === 'accounting' ? (
+                    // Render QuickBooks card first in accounting category
+                    <div className="col-span-1">
+                      {/* QuickBooks card; company_id comes from settings.general.company_name as a stand-in for org id in this UI */}
+                      <QuickBooksCard companyId={overrideCompanyId ?? (settings.general?.demo_mode ? 'demo' : (settings.general?.company_name || 'org')) } />
+                    </div>
+                  ) : null}
                   {settings.integrations.filter(i => i.category === cat).map((conn) => (
                     <div key={conn.id} className="border rounded p-3">
                       <div className="flex items-center justify-between">
