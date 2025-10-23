@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { callIntent, BACKEND_URL } from "../../lib/api";
-import KpiCard from "../../components/KpiCard";
-import { useToast } from "../../components/ui/ToastProvider";
-import { LiabilityForecastChart, ExpenseMixChart, PeerComparisonChart, SetAsideChart } from "../../components/charts/TaxCharts";
-import { ScenarioLabModal, ReminderModal } from "../../components/ui/TaxModals";
-import { Tooltip, ProvenanceBadge, InfoTooltip } from "../../components/ui/Tooltip";
+import { callIntent, BACKEND_URL } from "@/lib/api";
+import KpiCard from "@/components/KpiCard";
+import { useToast } from "@/components/ui/ToastProvider";
+import { LiabilityForecastChart, ExpenseMixChart, PeerComparisonChart, SetAsideChart } from "@/components/charts/TaxCharts";
+import { ScenarioLabModal, ReminderModal } from "@/components/ui/TaxModals";
+import { Tooltip, ProvenanceBadge, InfoTooltip } from "@/components/ui/Tooltip";
 
 const COMPANY_ID = "demo";
 

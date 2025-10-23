@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchScenarioFull } from "../../lib/api";
+import { fetchScenarioFull } from "@/lib/api";
 
 const COMPANY_ID = "demo";
 

@@ -1,6 +1,6 @@
 import React from "react";
 import ReviewsClient from "./ReviewsClient";
-import { fetchReviewsFull } from "../../lib/api";
+import { fetchReviewsFull } from "@/lib/api";
 
 export const metadata = { title: "Customer Reviews & Reputation Intelligence" };
 

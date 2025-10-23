@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { callIntent, BACKEND_URL } from "../../lib/api";
+import { callIntent, BACKEND_URL } from "@/lib/api";
 
 // Minimal types following the stub shape
 type KPI = { id: string; label: string; value: any; formatted?: string; state?: string };

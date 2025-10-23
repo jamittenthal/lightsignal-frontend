@@ -1,8 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import KpiCard from "../../components/KpiCard";
-import { ProvenanceBadge } from "../../components/ProvenanceBadge";
-import { BACKEND_URL, callIntent } from "../../lib/api";
+import KpiCard from "@/components/KpiCard";
+import { ProvenanceBadge } from "@/components/ProvenanceBadge";
+import { BACKEND_URL, callIntent } from "@/lib/api";
 import ExportButtons from "./ExportButtons";
 import Simulator from "./Simulator";
 import { DonutChart, TrendChart, PaymentTimeline, AmortizationChart } from './components/DebtCharts';

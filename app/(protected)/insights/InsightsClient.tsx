@@ -2,8 +2,8 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import ProvenanceBadge from "../../lib/components/ProvenanceBadge";
-import { TrendlineChart, BarChart, RadarChart, OpportunityMatrix } from "../../components/charts/SimpleCharts";
+import { ProvenanceBadge } from "@/components/ProvenanceBadge";
+import { TrendlineChart, BarChart, RadarChart, OpportunityMatrix } from "@/components/charts/SimpleCharts";
 
 function SmallBadge({ children }: { children: React.ReactNode }) {
   return <span className="inline-block text-xs px-2 py-1 rounded-full bg-slate-100 border text-slate-700">{children}</span>;

@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import KpiCard from "../../components/KpiCard";
-import { fetchReviewsFull, draftReviewReply } from "../../lib/api";
+import KpiCard from "@/components/KpiCard";
+import { fetchReviewsFull, draftReviewReply } from "@/lib/api";
 
 export default function ReviewsClient({ initialData }: { initialData: any }) {
   const [data, setData] = useState<any>(initialData || {});

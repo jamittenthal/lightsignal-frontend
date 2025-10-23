@@ -1,8 +1,8 @@
 import React from "react";
-import KpiCard from "../../components/KpiCard";
+import KpiCard from "@/components/KpiCard";
 import PayrollClient from "./PayrollClient";
 import { ExportButtons } from "./ExportButtons";
-import { BACKEND_URL, callIntent } from "../../lib/api";
+import { BACKEND_URL, callIntent } from "@/lib/api";
 
 function ShimmerCard() {
   return (
