@@ -180,7 +180,7 @@ export default function InsightsClient({ initialData }: { initialData: any }) {
             <div className="text-sm mt-1">Agents summarize tactics that have worked for peers.</div>
             <div className="mt-2 text-sm">
               {(d.peers?.sources || []).map((s: string, i: number) => (
-                <div key={i} className="inline-block mr-2 mt-1"><ProvenanceBadge source={s} /></div>
+                <div key={i} className="inline-block mr-2 mt-1"><ProvenanceBadge source={s} confidence={0.8} /></div>
               ))}
             </div>
           </div>
