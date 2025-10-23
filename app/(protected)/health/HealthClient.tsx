@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import KpiCard from "@/lib/components/KpiCard";
+import KpiCard from "@/components/KpiCard";
 import { TrendlineChart, RadarChart, OpportunityMatrix } from "@/components/charts/SimpleCharts";
 import { callIntent, BACKEND_URL } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";

@@ -36,7 +36,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // while undefined -> loading; null -> not logged in
   useEffect(() => {
     if (user === null) {
-      router.replace('/login');
+      // Redirect to login with return URL
+      const currentPath = window.location.pathname;
+      const redirectUrl = `/login?redirect=${encodeURIComponent(currentPath)}`;
+      router.replace(redirectUrl);
     }
   }, [user, router]);
 
