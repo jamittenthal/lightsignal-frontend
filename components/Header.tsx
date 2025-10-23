@@ -1,47 +1,32 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCompany } from "./CompanyProvider";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function Header() {
-  const [user, setUser] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading, companies, activeCompanyId, setActiveCompanyId } = useCompany();
+  const [orgOpen, setOrgOpen] = useState(false);
   const router = useRouter();
-
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      setLoading(true);
-      try {
-        const resp = await fetch(`${API_ORIGIN}/auth/session`, { credentials: "include" });
-        if (!mounted) return;
-        if (resp.ok) {
-          const json = await resp.json();
-          setUser(json.user ?? json);
-        } else {
-          setUser(null);
-        }
-      } catch (e) {
-        setUser(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-    load();
-    return () => { mounted = false; };
-  }, []);
 
   async function handleLogout() {
     try {
+      // call backend via /auth/logout; header route also supports server-side
       await fetch(`${API_ORIGIN}/auth/logout`, { method: "POST", credentials: "include" });
     } catch (e) {
       // ignore
     }
-    // best-effort navigate to /login
-    router.push("/login");
+    // clear local active company
+    try { localStorage.removeItem('active_company_id'); } catch (_) {}
+    router.push('/login');
+  }
+
+  function onSwitchCompany(id: string) {
+    setOrgOpen(false);
+    setActiveCompanyId(id);
   }
 
   return (
@@ -56,6 +41,25 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Org switcher: hidden if only one org */}
+          {!loading && user && companies && companies.length > 1 && (
+            <div className="relative">
+              <button onClick={() => setOrgOpen((s) => !s)} className="px-3 py-1 border rounded flex items-center gap-2">
+                <span className="text-sm">{(companies.find(c => c.company_id === activeCompanyId)?.name) || 'Select org'}</span>
+                <span className="text-xs">▾</span>
+              </button>
+              {orgOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow z-40">
+                  {companies.map((c) => (
+                    <div key={c.company_id} className="p-2 hover:bg-slate-50 cursor-pointer" onClick={() => onSwitchCompany(c.company_id)}>
+                      {c.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {!loading && !user && (
             <>
               <Link href="/demo" className="px-3 py-1 rounded border">Try Demo</Link>

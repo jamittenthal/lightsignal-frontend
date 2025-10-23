@@ -1,6 +1,9 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
 import KpiCard from "@/components/KpiCard";
 import { callIntent } from "@/lib/api";
+import { useCompany } from "@/components/CompanyProvider";
 
 type FinancialData = any;
 
@@ -45,18 +48,33 @@ const SAFE_STUB: FinancialData = {
   ],
 };
 
-async function fetchData() {
-  try {
-    const resp = await callIntent("financial_overview", { action: "load" }, "demo");
-    return resp || SAFE_STUB;
-  } catch (e) {
-    return SAFE_STUB;
-  }
-}
+export default function FinancialOverviewPage() {
+  const { activeCompanyId, loading } = useCompany();
+  const [data, setData] = useState<FinancialData | null>(null);
+  const [fetching, setFetching] = useState(false);
 
-export default async function FinancialOverviewPage() {
-  const data: FinancialData = await fetchData();
-  const k = data.kpis || {};
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (loading) return;
+      setFetching(true);
+      try {
+        const company = activeCompanyId || 'demo';
+        const resp = await callIntent('financial_overview', { action: 'load' }, company);
+        if (!mounted) return;
+        setData(resp || SAFE_STUB);
+      } catch (e) {
+        if (!mounted) return;
+        setData(SAFE_STUB);
+      } finally {
+        if (mounted) setFetching(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [activeCompanyId, loading]);
+
+  const d = data || SAFE_STUB;
+  const k = d.kpis || {};
 
   const pct = (v: number | undefined | null) => (v == null ? "—" : `${Math.round((v as number) * 1000) / 10}%`);
   const money = (v: number | undefined | null) => (v == null ? "—" : `$${(v as number).toLocaleString()}`);
@@ -71,6 +89,7 @@ export default async function FinancialOverviewPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Financial Overview</h1>
+      {fetching && <div className="text-sm text-gray-500 mb-3">Loading data for {activeCompanyId || 'demo'}…</div>}
 
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -152,7 +171,7 @@ export default async function FinancialOverviewPage() {
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="font-medium">Revenue Highlights</div>
             <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">
-              {(data.insights || []).map((t: any, i: number) => (
+              {(d.insights || []).map((t: any, i: number) => (
                 <li key={i}>{t}</li>
               ))}
             </ul>
@@ -181,7 +200,7 @@ export default async function FinancialOverviewPage() {
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="font-medium">Top Expense Categories</div>
             <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">
-              {(data.expense_breakdown || []).slice?.(0, 5)?.map((e: any, i: number) => (
+              {(d.expense_breakdown || []).slice?.(0, 5)?.map((e: any, i: number) => (
                 <li key={i}>{e.category} — {e.amount ? `$${e.amount}` : "—"} ({e.pct ? `${Math.round(e.pct*100)}%` : "—"})</li>
               ))}
             </ul>
@@ -194,26 +213,26 @@ export default async function FinancialOverviewPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Current Ratio</div>
-            <div className="text-lg font-semibold">{data.liquidity?.current_ratio ?? "—"}</div>
-            <div className="text-xs text-slate-500">{(data.liquidity?.current_ratio ?? 0) >= 1.5 ? 'Good' : (data.liquidity?.current_ratio ?? 0) >=1.0 ? 'Caution' : 'Risk'}</div>
+            <div className="text-lg font-semibold">{d.liquidity?.current_ratio ?? "—"}</div>
+            <div className="text-xs text-slate-500">{(d.liquidity?.current_ratio ?? 0) >= 1.5 ? 'Good' : (d.liquidity?.current_ratio ?? 0) >=1.0 ? 'Caution' : 'Risk'}</div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Quick Ratio</div>
-            <div className="text-lg font-semibold">{data.liquidity?.quick_ratio ?? "—"}</div>
-            <div className="text-xs text-slate-500">{(data.liquidity?.quick_ratio ?? 0) >= 1.2 ? 'Good' : (data.liquidity?.quick_ratio ?? 0) >=0.8 ? 'Caution' : 'Risk'}</div>
+            <div className="text-lg font-semibold">{d.liquidity?.quick_ratio ?? "—"}</div>
+            <div className="text-xs text-slate-500">{(d.liquidity?.quick_ratio ?? 0) >= 1.2 ? 'Good' : (d.liquidity?.quick_ratio ?? 0) >=0.8 ? 'Caution' : 'Risk'}</div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Debt-to-Equity</div>
-            <div className="text-lg font-semibold">{data.liquidity?.dte ?? "—"}</div>
+            <div className="text-lg font-semibold">{d.liquidity?.dte ?? "—"}</div>
             <div className="text-xs text-slate-500">Lower is better</div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Interest Coverage</div>
-            <div className="text-lg font-semibold">{data.liquidity?.interest_cover ?? "—"}</div>
-            <div className="text-xs text-slate-500">{(data.liquidity?.interest_cover ?? 0) >= 3 ? 'Good' : (data.liquidity?.interest_cover ?? 0) >=1.5 ? 'Caution' : 'Risk'}</div>
+            <div className="text-lg font-semibold">{d.liquidity?.interest_cover ?? "—"}</div>
+            <div className="text-xs text-slate-500">{(d.liquidity?.interest_cover ?? 0) >= 3 ? 'Good' : (d.liquidity?.interest_cover ?? 0) >=1.5 ? 'Caution' : 'Risk'}</div>
           </div>
         </div>
       </div>
@@ -223,25 +242,25 @@ export default async function FinancialOverviewPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">AR Turnover / DSO</div>
-            <div className="text-lg font-semibold">{data.efficiency?.dso_days ?? "—"} days</div>
+            <div className="text-lg font-semibold">{d.efficiency?.dso_days ?? "—"} days</div>
             <div className="text-xs text-slate-500">Lower is better</div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">AP Turnover / DPO</div>
-            <div className="text-lg font-semibold">{data.efficiency?.dpo_days ?? "—"} days</div>
+            <div className="text-lg font-semibold">{d.efficiency?.dpo_days ?? "—"} days</div>
             <div className="text-xs text-slate-500">Manage vendor terms</div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Inventory Turns</div>
-            <div className="text-lg font-semibold">{data.efficiency?.inv_turns ?? "—"}</div>
+            <div className="text-lg font-semibold">{d.efficiency?.inv_turns ?? "—"}</div>
             <div className="text-xs text-slate-500">Higher is better</div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm text-slate-500">Cash Conversion Cycle (CCC)</div>
-            <div className="text-lg font-semibold">{Math.round((data.efficiency?.ccc_days as number) ?? 0)}</div>
+            <div className="text-lg font-semibold">{Math.round((d.efficiency?.ccc_days as number) ?? 0)}</div>
             <div className="text-xs text-slate-500">Target &lt;60 days</div>
           </div>
         </div>
@@ -252,8 +271,8 @@ export default async function FinancialOverviewPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="col-span-2 rounded-2xl border bg-white p-4 shadow-sm">
             <div className="font-medium">Burn Rate</div>
-            <div className="text-2xl font-semibold">{money(data.cashflow?.burn_rate_monthly)}</div>
-            <div className="text-sm text-slate-500 mt-2">Runway: {data.cashflow?.runway_months ?? k.runway_months} months</div>
+            <div className="text-2xl font-semibold">{money(d.cashflow?.burn_rate_monthly)}</div>
+            <div className="text-sm text-slate-500 mt-2">Runway: {d.cashflow?.runway_months ?? k.runway_months} months</div>
 
             <div className="mt-4">
               <div className="text-sm text-slate-500">3–6 month forecast (base/best/worst)</div>
@@ -263,7 +282,7 @@ export default async function FinancialOverviewPage() {
 
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="font-medium">Net Cash Flow (3-mo)</div>
-            <div className="text-lg font-semibold">{(data.cashflow?.net_trend_3mo as string) ?? "—"}</div>
+            <div className="text-lg font-semibold">{(d.cashflow?.net_trend_3mo as string) ?? "—"}</div>
             <div className="text-sm text-slate-500 mt-2">Positive / Negative / Stable</div>
           </div>
         </div>
@@ -291,7 +310,7 @@ export default async function FinancialOverviewPage() {
               </tr>
             </thead>
             <tbody>
-              {(data.variance || []).map((v: any, i: number) => {
+              {(d.variance || []).map((v: any, i: number) => {
                 const pct = (v.variance_pct ?? 0) * 100;
                 const cls = Math.abs(pct) <= 5 ? 'bg-emerald-50 text-emerald-800' : Math.abs(pct) <=10 ? 'bg-yellow-50 text-yellow-800' : 'bg-red-50 text-red-800';
                 return (
@@ -311,7 +330,7 @@ export default async function FinancialOverviewPage() {
       <div id="risks" className="mb-8">
         <h2 className="text-xl font-semibold mb-2">7) AI Risk Monitor & Insights</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(data.risks || []).map((r: any, i: number) => (
+          {(d.risks || []).map((r: any, i: number) => (
             <div key={i} className="rounded-2xl border bg-white p-4 shadow-sm">
               <div className="font-medium">{r.title}</div>
               <div className="text-sm text-slate-600 mt-1">{r.note}</div>
