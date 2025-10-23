@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import KpiCard from "../../components/KpiCard";
-import { callIntent } from "../../lib/api";
+import KpiCard from "@/components/KpiCard";
+import { callIntent } from "@/lib/api";
 
 // Stub data as specified in the requirements
 const INVENTORY_STUB = {

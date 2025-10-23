@@ -1,9 +1,9 @@
 import React from "react";
-import KpiCard from "../../components/KpiCard";
+import KpiCard from "@/components/KpiCard";
 import DemandClient from "./DemandClient";
 import DemandSimulator from "./DemandSimulator";
 import DemandMap from "./DemandMap";
-import { BACKEND_URL, callIntent } from "../../lib/api";
+import { BACKEND_URL, callIntent } from "@/lib/api";
 
 const STUB = {
   kpis: [

@@ -1,8 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import KpiCard from "../../components/KpiCard";
-import { BACKEND_URL, callIntent } from "../../lib/api";
-import { Tooltip, InfoTooltip, ProvenanceBadge } from "../../components/ui/Tooltip";
+import KpiCard from "@/components/KpiCard";
+import { BACKEND_URL, callIntent } from "@/lib/api";
+import { Tooltip, InfoTooltip, ProvenanceBadge } from "@/components/ui/Tooltip";
 
 const STUB = {
   "kpis": [

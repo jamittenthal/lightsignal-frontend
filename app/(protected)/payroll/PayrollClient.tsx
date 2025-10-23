@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import KpiCard from "../../components/KpiCard";
+import KpiCard from "@/components/KpiCard";
 
 function ShimmerCard() {
   return (

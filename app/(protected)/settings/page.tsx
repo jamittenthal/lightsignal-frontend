@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { callIntent, BACKEND_URL } from "../../lib/api";
-import { ConnectionCard, type Connection } from "../../components/settings/ConnectionCard";
-import { ProvenancePanel } from "../../components/settings/ProvenancePanel";
-import { AssistantPanel } from "../../components/settings/AssistantPanel";
-import { MaskedInput, ImportExportControls } from "../../components/settings/SettingsControls";
-import { AuditLog } from "../../components/settings/AuditLog";
+import { callIntent, BACKEND_URL } from "@/lib/api";
+import { ConnectionCard, type Connection } from "@/components/settings/ConnectionCard";
+import { ProvenancePanel } from "@/components/settings/ProvenancePanel";
+import { AssistantPanel } from "@/components/settings/AssistantPanel";
+import { MaskedInput, ImportExportControls } from "@/components/settings/SettingsControls";
+import { AuditLog } from "@/components/settings/AuditLog";
 
 const COMPANY_ID = "demo";
 

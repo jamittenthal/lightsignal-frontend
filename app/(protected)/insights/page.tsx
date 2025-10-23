@@ -1,5 +1,5 @@
 import React from "react";
-import KpiCard from "../../components/KpiCard";
+import KpiCard from "@/components/KpiCard";
 import InsightsClient from "./InsightsClient";
 
 // STUB DATA - Safe fallback for static generation

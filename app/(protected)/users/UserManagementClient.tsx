@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import KpiCard from "../../components/KpiCard";
-import { ProvenanceBadge } from "../../components/ProvenanceBadge";
+import KpiCard from "@/components/KpiCard";
+import { ProvenanceBadge } from "@/components/ProvenanceBadge";
 
 // Types
 interface UserManagementKPI {
