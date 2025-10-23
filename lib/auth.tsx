@@ -36,6 +36,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // while undefined -> loading; null -> not logged in
   useEffect(() => {
     if (user === null) {
+      // If this is the demo shell, do not force redirect; demo should be public
+      try {
+        const p = window.location?.pathname || '';
+        if (p.startsWith('/demo')) {
+          // allow unauthenticated demo access
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
       router.replace('/login');
     }
   }, [user, router]);

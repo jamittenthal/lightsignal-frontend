@@ -3,6 +3,7 @@ import React from "react";
 import "./globals.css";
 import { ToastProvider } from "../components/ui/ToastProvider";
 import Header from "../components/Header";
+import DemoModeProvider from "../components/DemoModeProvider";
 
 export const metadata = { title: "LightSignal" };
 
@@ -13,8 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900">
         <ToastProvider>
-          <Header />
-          <main className="mx-auto max-w-5xl py-8">{children}</main>
+          <DemoModeProvider>
+            <Header />
+            <main className="mx-auto max-w-5xl py-8">{children}</main>
+          </DemoModeProvider>
         </ToastProvider>
       </body>
     </html>
