@@ -8,7 +8,7 @@ const nextConfig = {
   // Transpile packages that may have ES module issues
   transpilePackages: ['recharts', 'leaflet', 'react-leaflet'],
 
-  // 🔑 Ensure webpack also understands "@/..."
+  // 🔑 Ensure webpack also understands "@/..." 
   webpack: (config) => {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
